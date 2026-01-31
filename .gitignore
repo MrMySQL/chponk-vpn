@@ -31,8 +31,5 @@ npm-debug.log*
 # TypeScript
 *.tsbuildinfo
 
-# Drizzle
-drizzle/meta/
-
 # Test
 coverage/

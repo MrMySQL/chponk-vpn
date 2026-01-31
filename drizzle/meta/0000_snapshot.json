@@ -1,0 +1,148 @@
+{
+  "id": "bb1195a2-9389-4389-81c6-f5a907d53631",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.servers": {
+      "name": "servers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "flag_emoji": {
+          "name": "flag_emoji",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "host": {
+          "name": "host",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "domain": {
+          "name": "domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "xui_port": {
+          "name": "xui_port",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2053
+        },
+        "xui_username": {
+          "name": "xui_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "xui_password": {
+          "name": "xui_password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inbound_id": {
+          "name": "inbound_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "reality_port": {
+          "name": "reality_port",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 443
+        },
+        "reality_dest": {
+          "name": "reality_dest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reality_sni": {
+          "name": "reality_sni",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reality_public_key": {
+          "name": "reality_public_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reality_short_id": {
+          "name": "reality_short_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "servers_domain_unique": {
+          "name": "servers_domain_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "domain"
+          ]
+        }
+      }
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

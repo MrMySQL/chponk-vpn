@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS "servers" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"location" text NOT NULL,
+	"flag_emoji" text,
+	"host" text NOT NULL,
+	"domain" text NOT NULL,
+	"xui_port" integer DEFAULT 2053 NOT NULL,
+	"xui_username" text NOT NULL,
+	"xui_password" text NOT NULL,
+	"inbound_id" integer DEFAULT 1 NOT NULL,
+	"reality_port" integer DEFAULT 443 NOT NULL,
+	"reality_dest" text NOT NULL,
+	"reality_sni" text NOT NULL,
+	"reality_public_key" text,
+	"reality_short_id" text,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "servers_domain_unique" UNIQUE("domain")
+);
