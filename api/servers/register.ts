@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { db } from "../../src/db";
-import { servers } from "../../src/db/schema";
-import { encrypt } from "../../src/lib/crypto";
-import { serverRegistrationSchema } from "../../src/lib/validators";
+import { db } from "../../src/db/index.js";
+import { servers } from "../../src/db/schema.js";
+import { encrypt } from "../../src/lib/crypto.js";
+import { serverRegistrationSchema } from "../../src/lib/validators.js";
 
 export default async function handler(
   req: VercelRequest,
