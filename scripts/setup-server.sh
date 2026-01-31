@@ -11,8 +11,8 @@ set -e
 #     --cf-zone-id "your-zone-id" \
 #     --xui-user "admin" \
 #     --xui-pass "securepassword" \
-#     --ws-path "/ws-abc123" \
-#     --grpc-service "grpc-xyz789" \
+#     --reality-dest "www.microsoft.com:443" \
+#     --reality-sni "microsoft.com" \
 #     --api-endpoint "https://your-api.vercel.app/api/servers/register" \
 #     --api-token "your-api-token" \
 #     --server-name "Frankfurt" \
@@ -33,13 +33,11 @@ set -e
 #   3  - Generate Cloudflare Origin Certificate
 #   4  - Install 3x-ui
 #   5  - Create Inbounds via API
-#   6  - Configure Nginx
-#   7  - Configure Firewall
-#   8  - Enable Cloudflare Proxy
-#   9  - Register with API
-#   10 - Print Summary
+#   6  - Configure Firewall
+#   7  - Register with API
+#   8  - Print Summary
 #
-# Note: Uses Cloudflare Origin Certificate (no Let's Encrypt needed)
+# Note: Uses Let's Encrypt for TLS, Cloudflare for DNS only (gray cloud)
 #######################################
 
 # Colors for output
@@ -58,12 +56,11 @@ REALITY_PORT=443
 REALITY_DEST="www.cloudflare.com:443"
 REALITY_SNI="cloudflare.com"
 PANEL_PATH=""  # Secret path for 3x-ui panel (auto-generated if empty)
-DIRECT_MODE=false  # If true, use Let's Encrypt instead of Cloudflare proxy
 CLEAN_INBOUNDS=false  # If true, remove all existing inbounds before creating new ones
 
 # Step control
 STEP_FROM=1
-STEP_TO=10
+STEP_TO=8
 STEP_ONLY=""
 
 # Function to check if step should run
@@ -81,15 +78,13 @@ should_run_step() {
 show_steps() {
   echo "Available steps:"
   echo "  1  - System Update (apt update, install packages)"
-  echo "  2  - Configure Cloudflare DNS (create/update A record)"
-  echo "  3  - Generate Cloudflare Origin Certificate"
+  echo "  2  - Configure Cloudflare DNS (create/update A record, gray cloud)"
+  echo "  3  - Generate Let's Encrypt Certificate"
   echo "  4  - Install 3x-ui panel"
-  echo "  5  - Create Inbounds via API (WS + gRPC)"
-  echo "  6  - Configure Nginx (reverse proxy)"
-  echo "  7  - Configure Firewall (ufw)"
-  echo "  8  - Enable Cloudflare Proxy (orange cloud)"
-  echo "  9  - Register with API (optional)"
-  echo "  10 - Print Summary"
+  echo "  5  - Create VLESS+Reality Inbound"
+  echo "  6  - Configure Firewall (ufw)"
+  echo "  7  - Register with API (optional)"
+  echo "  8  - Print Summary"
   exit 0
 }
 
@@ -114,7 +109,6 @@ while [[ $# -gt 0 ]]; do
     --step) STEP_ONLY="$2"; shift 2 ;;
     --from) STEP_FROM="$2"; shift 2 ;;
     --to) STEP_TO="$2"; shift 2 ;;
-    --direct) DIRECT_MODE=true; shift ;;
     --clean-inbounds) CLEAN_INBOUNDS=true; shift ;;
     --list-steps) show_steps ;;
     *) log_error "Unknown option: $1" ;;
@@ -123,10 +117,7 @@ done
 
 # Validate required arguments
 [[ -z "$DOMAIN" ]] && log_error "Missing --domain"
-# CF credentials only required if not in direct mode OR if we want DNS management
-if [[ "$DIRECT_MODE" != "true" ]]; then
-  [[ -z "$CF_TOKEN" ]] && log_error "Missing --cf-token (use --direct for Let's Encrypt mode)"
-fi
+[[ -z "$CF_TOKEN" ]] && log_error "Missing --cf-token"
 [[ -z "$CF_ZONE_ID" ]] && log_error "Missing --cf-zone-id"
 [[ -z "$XUI_USER" ]] && log_error "Missing --xui-user"
 [[ -z "$XUI_PASS" ]] && log_error "Missing --xui-pass"
@@ -157,16 +148,16 @@ log_info "Panel Path: $PANEL_PATH"
 # Step 1: System Update
 #######################################
 if should_run_step 1; then
-  log_info "[Step 1/10] Updating system packages..."
+  log_info "[Step 1/8] Updating system packages..."
   apt update && apt upgrade -y
-  apt install -y curl wget unzip jq nginx ufw openssl
+  apt install -y curl wget unzip jq ufw openssl
 fi
 
 #######################################
 # Step 2: Configure Cloudflare DNS
 #######################################
 if should_run_step 2; then
-  log_info "[Step 2/10] Setting up Cloudflare DNS for $DOMAIN..."
+  log_info "[Step 2/8] Setting up Cloudflare DNS for $DOMAIN (gray cloud)..."
 
   # Check if DNS record exists
   EXISTING_RECORD=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}&type=A" \
@@ -207,91 +198,37 @@ if should_run_step 2; then
 fi
 
 #######################################
-# Step 3: Generate SSL Certificate
+# Step 3: Generate Let's Encrypt Certificate
 #######################################
 if should_run_step 3; then
-  if [[ "$DIRECT_MODE" == "true" ]]; then
-    log_info "[Step 3/10] Getting Let's Encrypt certificate..."
+  log_info "[Step 3/8] Getting Let's Encrypt certificate..."
 
-    # Install certbot
-    apt install -y certbot
+  # Install certbot
+  apt install -y certbot
 
-    # Stop nginx temporarily for standalone verification
-    systemctl stop nginx 2>/dev/null || true
+  # Temporarily open port 80 for Let's Encrypt verification
+  ufw allow 80/tcp 2>/dev/null || true
 
-    # Temporarily open port 80 for Let's Encrypt verification
-    ufw allow 80/tcp 2>/dev/null || true
+  # Get certificate
+  certbot certonly --standalone --non-interactive --agree-tos \
+    --email "admin@${DOMAIN}" \
+    -d "${DOMAIN}" \
+    --preferred-challenges http
 
-    # Get certificate
-    certbot certonly --standalone --non-interactive --agree-tos \
-      --email "admin@${DOMAIN}" \
-      -d "${DOMAIN}" \
-      --preferred-challenges http
+  log_info "Let's Encrypt certificate obtained successfully"
 
-    # Create symlinks to standard location for nginx config compatibility
-    mkdir -p /etc/ssl/cloudflare
-    ln -sf /etc/letsencrypt/live/${DOMAIN}/fullchain.pem /etc/ssl/cloudflare/${DOMAIN}.crt
-    ln -sf /etc/letsencrypt/live/${DOMAIN}/privkey.pem /etc/ssl/cloudflare/${DOMAIN}.key
-
-    log_info "Let's Encrypt certificate obtained successfully"
-
-    # Setup auto-renewal with nginx reload
-    cat > /etc/cron.d/certbot-renew <<CRON
-0 3 * * * root certbot renew --quiet --post-hook "systemctl reload nginx"
+  # Setup auto-renewal with x-ui restart
+  cat > /etc/cron.d/certbot-renew <<CRON
+0 3 * * * root certbot renew --quiet --post-hook "x-ui restart"
 CRON
-    log_info "Auto-renewal cron job configured"
-  else
-    log_info "[Step 3/10] Generating Cloudflare Origin Certificate..."
-
-    # Create SSL directory
-    mkdir -p /etc/ssl/cloudflare
-
-    # Generate private key
-    openssl genrsa -out /etc/ssl/cloudflare/${DOMAIN}.key 2048
-
-    # Generate CSR
-    openssl req -new -key /etc/ssl/cloudflare/${DOMAIN}.key \
-      -out /etc/ssl/cloudflare/${DOMAIN}.csr \
-      -subj "/CN=${DOMAIN}"
-
-    # Read CSR content
-    CSR_CONTENT=$(cat /etc/ssl/cloudflare/${DOMAIN}.csr | awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}')
-
-    # Request Origin Certificate from Cloudflare
-    log_info "Requesting Origin Certificate from Cloudflare..."
-    CERT_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/certificates" \
-      -H "Authorization: Bearer ${CF_TOKEN}" \
-      -H "Content-Type: application/json" \
-      --data "{
-        \"hostnames\": [\"${DOMAIN}\", \"*.${DOMAIN}\"],
-        \"requested_validity\": 5475,
-        \"request_type\": \"origin-rsa\",
-        \"csr\": \"${CSR_CONTENT}\"
-      }")
-
-    # Check if successful
-    if echo "$CERT_RESPONSE" | jq -e '.success' > /dev/null 2>&1; then
-      # Extract and save certificate
-      echo "$CERT_RESPONSE" | jq -r '.result.certificate' > /etc/ssl/cloudflare/${DOMAIN}.crt
-      log_info "Origin Certificate obtained successfully (valid for 15 years)"
-    else
-      log_error "Failed to get Origin Certificate: $(echo "$CERT_RESPONSE" | jq -r '.errors')"
-    fi
-
-    # Set permissions
-    chmod 600 /etc/ssl/cloudflare/${DOMAIN}.key
-    chmod 644 /etc/ssl/cloudflare/${DOMAIN}.crt
-  fi
+  log_info "Auto-renewal cron job configured"
 fi
 
 #######################################
 # Step 4: Install 3x-ui
 #######################################
 if should_run_step 4; then
-  log_info "[Step 4/10] Installing 3x-ui..."
-
-  # Stop any existing nginx to free port 80 temporarily (needed by 3x-ui installer)
-  systemctl stop nginx 2>/dev/null || true
+  log_info "[Step 4/8] Installing 3x-ui..."
 
   # Download 3x-ui release directly (skip interactive installer)
   XUI_VERSION=$(curl -s "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest" | jq -r '.tag_name')
@@ -383,7 +320,7 @@ fi
 # Step 5: Create VLESS+Reality Inbound
 #######################################
 if should_run_step 5; then
-  log_info "[Step 5/10] Creating VLESS+Reality inbound..."
+  log_info "[Step 5/8] Creating VLESS+Reality inbound..."
 
   # Stop x-ui to safely modify database
   systemctl stop x-ui
@@ -449,27 +386,13 @@ if should_run_step 5; then
   log_info "Setting panel base path to ${PANEL_PATH}/"
   sqlite3 "$XUI_DB" "UPDATE settings SET value = '${PANEL_PATH}/' WHERE key = 'webBasePath';"
 
-  # Enable SSL for panel
-  if [[ "$DIRECT_MODE" == "true" ]]; then
-    # Use Let's Encrypt certs
-    CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
-    KEY_FILE="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
-  else
-    # Use Cloudflare origin certs
-    CERT_FILE="/etc/ssl/cloudflare/${DOMAIN}.crt"
-    KEY_FILE="/etc/ssl/cloudflare/${DOMAIN}.key"
-  fi
+  # Enable SSL for panel using Let's Encrypt certs
+  CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+  KEY_FILE="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
 
   log_info "Enabling SSL for panel..."
   sqlite3 "$XUI_DB" "UPDATE settings SET value = '${CERT_FILE}' WHERE key = 'webCertFile';"
   sqlite3 "$XUI_DB" "UPDATE settings SET value = '${KEY_FILE}' WHERE key = 'webKeyFile';"
-
-  # Stop nginx if it's using port 443 (Reality needs it)
-  if [[ "$REALITY_PORT" == "443" ]]; then
-    log_info "Stopping nginx (Reality will use port 443)..."
-    systemctl stop nginx 2>/dev/null || true
-    systemctl disable nginx 2>/dev/null || true
-  fi
 
   # Restart x-ui to load new config
   systemctl start x-ui
@@ -477,114 +400,27 @@ if should_run_step 5; then
 fi
 
 #######################################
-# Step 6: Configure Nginx (optional - skip if Reality on 443)
+# Step 6: Configure Firewall
 #######################################
 if should_run_step 6; then
-  if [[ "$REALITY_PORT" == "443" ]]; then
-    log_info "[Step 6/10] Skipping Nginx (Reality uses port 443, panel accessible on ${XUI_PORT})"
-  else
-    log_info "[Step 6/10] Configuring Nginx..."
-
-    # Create nginx config (landing page + panel proxy only)
-    cat > /etc/nginx/sites-available/${DOMAIN} <<NGINX_CONF
-server {
-    listen 443 ssl http2;
-    server_name ${DOMAIN};
-
-    ssl_certificate /etc/ssl/cloudflare/${DOMAIN}.crt;
-    ssl_certificate_key /etc/ssl/cloudflare/${DOMAIN}.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # Landing page (camouflage)
-    location / {
-        root /var/www/${DOMAIN};
-        index index.html;
-    }
-
-    # 3x-ui Panel (secret path only)
-    location ${PANEL_PATH}/ {
-        proxy_pass http://127.0.0.1:${XUI_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_buffering off;
-    }
-}
-NGINX_CONF
-
-    # Create landing page directory and copy uploaded page
-    mkdir -p /var/www/${DOMAIN}
-    if [[ -f /tmp/landing-page.html ]]; then
-      cp /tmp/landing-page.html /var/www/${DOMAIN}/index.html
-      log_info "Using custom landing page"
-    else
-      log_warn "No landing page found, creating default"
-      echo "<html><body><h1>Welcome</h1></body></html>" > /var/www/${DOMAIN}/index.html
-    fi
-
-    # Enable site
-    ln -sf /etc/nginx/sites-available/${DOMAIN} /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default
-
-    # Test and start nginx
-    nginx -t && systemctl restart nginx && systemctl enable nginx
-    log_info "Nginx started on port 443"
-  fi
-fi
-
-#######################################
-# Step 7: Configure Firewall
-#######################################
-if should_run_step 7; then
-  log_info "[Step 7/10] Configuring firewall..."
+  log_info "[Step 6/8] Configuring firewall..."
   ufw --force reset
   ufw default deny incoming
   ufw default allow outgoing
   ufw allow 22/tcp                    # SSH
+  ufw allow 80/tcp                    # HTTP (for Let's Encrypt renewal)
   ufw allow ${REALITY_PORT}/tcp       # VLESS+Reality
-  if [[ "$REALITY_PORT" == "443" ]]; then
-    ufw allow ${XUI_PORT}/tcp         # Direct panel access (no nginx)
-  else
-    ufw allow 443/tcp                 # HTTPS for nginx
-  fi
-  if [[ "$DIRECT_MODE" == "true" ]]; then
-    ufw allow 80/tcp                  # HTTP (for Let's Encrypt renewal)
-  fi
+  ufw allow ${XUI_PORT}/tcp           # 3x-ui panel
   ufw --force enable
-  log_info "Firewall configured - Reality on port ${REALITY_PORT}"
+  log_info "Firewall configured - Reality on port ${REALITY_PORT}, Panel on port ${XUI_PORT}"
 fi
 
 #######################################
-# Step 8: Enable Cloudflare Proxy (skipped for Reality and direct mode)
+# Step 7: Register with API
 #######################################
-if should_run_step 8; then
-  if [[ "$DIRECT_MODE" == "true" ]] || [[ "$REALITY_PORT" == "443" ]]; then
-    log_info "[Step 8/10] Skipping Cloudflare proxy (Reality requires direct connection)"
-  else
-    log_info "[Step 8/10] Enabling Cloudflare proxy (orange cloud)..."
-
-    # Get the DNS record ID
-    RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}&type=A" \
-      -H "Authorization: Bearer ${CF_TOKEN}" \
-      -H "Content-Type: application/json" | jq -r '.result[0].id')
-
-    # Enable proxy
-    curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
-      -H "Authorization: Bearer ${CF_TOKEN}" \
-      -H "Content-Type: application/json" \
-      --data '{"proxied": true}' | jq .
-  fi
-fi
-
-#######################################
-# Step 9: Register with API
-#######################################
-if should_run_step 9; then
+if should_run_step 7; then
   if [[ "$SKIP_REGISTRATION" != "true" ]]; then
-    log_info "[Step 9/10] Registering server with API..."
+    log_info "[Step 7/8] Registering server with API..."
 
     REGISTER_RESPONSE=$(curl -s -X POST "${API_ENDPOINT}" \
       -H "Authorization: Bearer ${API_TOKEN}" \
@@ -610,16 +446,15 @@ if should_run_step 9; then
 fi
 
 #######################################
-# Step 10: Print Summary
+# Step 8: Print Summary
 #######################################
-if should_run_step 10; then
+if should_run_step 8; then
   log_info "====================================="
   log_info "   SERVER SETUP COMPLETE!"
   log_info "====================================="
   echo ""
   echo "Domain:        ${DOMAIN}"
   echo "Server IP:     ${SERVER_IP}"
-  echo "Mode:          $(if [[ "$DIRECT_MODE" == "true" ]]; then echo "Direct (Let's Encrypt)"; else echo "Cloudflare Proxy"; fi)"
   echo ""
   echo "3x-ui Panel:   https://${DOMAIN}:${XUI_PORT}${PANEL_PATH}/"
   echo "3x-ui User:    ${XUI_USER}"

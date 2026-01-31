@@ -27,7 +27,7 @@ cp scripts/deploy.conf.example scripts/deploy.conf
 # Edit deploy.conf with your Cloudflare API credentials
 
 # 2. Deploy a server
-./scripts/deploy.sh root@YOUR_SERVER_IP your-domain.com --direct
+./scripts/deploy.sh root@YOUR_SERVER_IP your-domain.com
 ```
 
 ## Configuration
@@ -66,7 +66,6 @@ Required permissions:
 
 | Option | Description |
 |--------|-------------|
-| `--direct` | Use Let's Encrypt instead of Cloudflare proxy |
 | `--name "Name"` | Server display name (default: domain) |
 | `--location "City, CC"` | Server location (default: Unknown) |
 | `--reality-port 443` | Reality listen port (default: 443) |
@@ -86,20 +85,18 @@ Use `--list-steps` to see all steps. See [SETUP-SCRIPT.md](./SETUP-SCRIPT.md) fo
 ## Examples
 
 ```bash
-# Full deployment with Let's Encrypt
-./scripts/deploy.sh root@167.99.123.45 de-fsn1.example.com --direct
+# Full deployment
+./scripts/deploy.sh root@167.99.123.45 de-fsn1.example.com
 
 # With custom name and location
 ./scripts/deploy.sh root@1.2.3.4 de-fsn1.example.com \
-  --direct \
   --name "Frankfurt 1" \
   --location "Frankfurt, DE"
 
-# Custom Reality destination
+# Custom Reality destination (impersonate different site)
 ./scripts/deploy.sh root@1.2.3.4 de-fsn1.example.com \
-  --direct \
-  --reality-dest "www.google.com:443" \
-  --reality-sni "www.google.com"
+  --reality-dest "www.microsoft.com:443" \
+  --reality-sni "microsoft.com"
 
 # Re-run only inbound creation
 ./scripts/deploy.sh root@1.2.3.4 de-fsn1.example.com --step 5
@@ -140,17 +137,14 @@ Or manually configure using the connection details above.
                     ┌─────────────────────────────────────┐
                     │           VPN Server                │
                     │                                     │
-Client ─────────────┼──► Reality (443) ──► Internet      │
+Client ─────────────┼──► Xray Reality (443) ──► Internet │
                     │                                     │
-Browser ────────────┼──► Nginx (8443) ──► Landing Page   │
-                    │         │                           │
-                    │         └──► 3x-ui Panel (2053)    │
+Browser ────────────┼──► 3x-ui Panel (2053)              │
                     └─────────────────────────────────────┘
 ```
 
-- **Reality on 443**: VPN traffic (VLESS+Reality)
-- **Nginx on 8443**: Landing page camouflage + hidden panel access
-- **3x-ui on 2053**: Panel backend (only accessible via nginx)
+- **Xray on 443**: VLESS+Reality VPN traffic (camouflaged as microsoft.com etc.)
+- **3x-ui on 2053**: Admin panel with Let's Encrypt TLS
 
 ## Files
 
@@ -160,11 +154,8 @@ scripts/
 ├── deploy.conf            # Credentials (gitignored)
 ├── deploy.conf.example    # Template for deploy.conf
 ├── setup-server.sh        # Remote setup script
-├── nginx.conf.template    # Nginx config template
 ├── README.md              # This file
 └── SETUP-SCRIPT.md        # Technical reference for setup-server.sh
-
-index.html                 # Landing page (camouflage)
 ```
 
 ## Troubleshooting
@@ -178,9 +169,9 @@ ssh root@IP "ufw status"
 
 ### Panel Not Accessible
 
-Panel is on port 8443 (not 443), access via:
+Panel is on port 2053, access via:
 ```
-https://domain:8443/panel-xxxxx/
+https://domain:2053/panel-xxxxx/
 ```
 
 ### Certificate Issues

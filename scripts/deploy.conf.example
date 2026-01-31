@@ -2,8 +2,7 @@
 # Copy this file to deploy.conf and fill in your values
 # Keep deploy.conf secure - it contains secrets!
 
-# Cloudflare API Credentials
-# Required for CF proxy mode, optional for --direct mode
+# Cloudflare API Credentials (for DNS management - gray cloud)
 # Get token at: https://dash.cloudflare.com/profile/api-tokens
 # Permissions needed: Zone → DNS → Edit, Zone → Zone → Read
 CF_TOKEN="your-cloudflare-api-token"

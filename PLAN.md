@@ -1,12 +1,13 @@
 # VPN Telegram Bot - Production Implementation Plan
 
 ## Overview
-A production-ready VPN service with Telegram bot interface, supporting VLESS protocol (WebSocket + gRPC transports) via 3x-ui panel, with payments through Telegram Stars and TON.
+A production-ready VPN service with Telegram bot interface, supporting VLESS Reality protocol via 3x-ui panel, with payments through Telegram Stars and TON.
 
 **Key Architecture Decisions:**
-- **Protocol:** VLESS with WebSocket and gRPC (Cloudflare-compatible)
-- **Protection:** All traffic proxied through Cloudflare (DDoS protection, hidden server IPs)
-- **Camouflage:** Each server hosts a boring enterprise landing page
+- **Protocol:** VLESS Reality (TLS fingerprint camouflage)
+- **DNS:** Cloudflare DNS-only (gray cloud) - no proxy
+- **TLS:** Let's Encrypt certificates
+- **Camouflage:** Reality protocol impersonates legitimate websites (e.g., microsoft.com)
 - **Target users:** Regions with active VPN blocking (China, Iran, Russia)
 
 ---
@@ -43,7 +44,7 @@ vpn/
 │   │   ├── payment/
 │   │   │   ├── stars.ts          # Telegram Stars
 │   │   │   └── ton.ts            # TON payments
-│   │   └── config-generator.ts   # Generate VLESS WS/gRPC configs
+│   │   └── config-generator.ts   # Generate VLESS Reality configs
 │   ├── db/
 │   │   ├── schema.ts             # Drizzle schema
 │   │   ├── index.ts              # DB connection
@@ -105,16 +106,17 @@ CREATE TABLE servers (
   name VARCHAR(100) NOT NULL,
   location VARCHAR(100) NOT NULL,      -- e.g., "Frankfurt, DE"
   flag_emoji VARCHAR(10),              -- e.g., "🇩🇪"
-  host VARCHAR(255) NOT NULL,          -- Server IP (not exposed to users)
-  domain VARCHAR(255) NOT NULL,        -- e.g., "de.myvpn.xyz" (CF-proxied)
+  host VARCHAR(255) NOT NULL,          -- Server IP
+  domain VARCHAR(255) NOT NULL,        -- e.g., "de.myvpn.xyz" (DNS-only, gray cloud)
   xui_port INTEGER DEFAULT 2053,
   xui_username VARCHAR(100),
   xui_password VARCHAR(255),           -- encrypted
-  inbound_id_ws INTEGER,               -- 3x-ui WebSocket inbound ID
-  inbound_id_grpc INTEGER,             -- 3x-ui gRPC inbound ID
-  ws_path VARCHAR(100) NOT NULL,       -- e.g., "/ws-abc123"
-  grpc_service VARCHAR(100) NOT NULL,  -- e.g., "grpc-xyz789"
-  transport VARCHAR(20) DEFAULT 'ws',  -- 'ws' or 'grpc' (default for users)
+  inbound_id INTEGER,                  -- 3x-ui Reality inbound ID
+  reality_port INTEGER DEFAULT 443,    -- Reality listening port
+  reality_dest VARCHAR(255) NOT NULL,  -- e.g., "microsoft.com:443" (SNI target)
+  reality_sni VARCHAR(255) NOT NULL,   -- e.g., "microsoft.com"
+  reality_public_key VARCHAR(255),     -- Reality public key
+  reality_short_id VARCHAR(32),        -- Reality short ID
   is_active BOOLEAN DEFAULT TRUE,
   current_load INTEGER DEFAULT 0,
   max_capacity INTEGER DEFAULT 100
@@ -249,25 +251,28 @@ class XuiClient {
 
 ## 5. Subscription Link Generation
 
-### VLESS + WebSocket Format
+### VLESS Reality Format
 ```
-vless://{uuid}@{domain}:443?encryption=none&type=ws&host={domain}&path={ws_path}&security=tls&sni={domain}#{server_name}
-```
-
-### VLESS + gRPC Format
-```
-vless://{uuid}@{domain}:443?encryption=none&type=grpc&serviceName={grpc_service}&security=tls&sni={domain}#{server_name}
+vless://{uuid}@{domain}:{port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={reality_sni}&fp=chrome&pbk={public_key}&sid={short_id}&type=tcp#{server_name}
 ```
 
-### Example (Frankfurt WebSocket)
+### Example (Frankfurt Reality)
 ```
-vless://abc123-uuid@de.myvpn.xyz:443?encryption=none&type=ws&host=de.myvpn.xyz&path=/ws-secret&security=tls&sni=de.myvpn.xyz#Frankfurt-DE
+vless://abc123-uuid@de.myvpn.xyz:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=microsoft.com&fp=chrome&pbk=abc123publickey&sid=abcd1234&type=tcp#Frankfurt-DE
 ```
+
+### Parameters Explained
+- `flow=xtls-rprx-vision` - Required for Reality
+- `security=reality` - Reality protocol
+- `sni` - Target website to impersonate (e.g., microsoft.com)
+- `fp=chrome` - Browser fingerprint (chrome, firefox, safari, etc.)
+- `pbk` - Reality public key from server
+- `sid` - Short ID for additional security
 
 ### Bot Flow
 1. Generate unique UUID for user
 2. Create client in 3x-ui via API
-3. Build subscription URL (WebSocket or gRPC based on server config)
+3. Build VLESS Reality subscription URL with server's Reality keys
 4. Store in database
 5. Return to user as:
    - Clickable link
@@ -293,46 +298,41 @@ vless://abc123-uuid@de.myvpn.xyz:443?encryption=none&type=ws&host=de.myvpn.xyz&p
 
 ## 7. Domain & Cloudflare Strategy
 
-All traffic routes through Cloudflare for DDoS protection and IP hiding.
+DNS managed via Cloudflare (DNS-only mode). Reality protocol handles camouflage by impersonating legitimate TLS servers.
 
 ### Architecture
 ```
-User → Cloudflare (orange cloud) → VPN Server
-                ↓
-        - DDoS protection
-        - Server IP hidden
-        - Traffic looks like HTTPS to website
+User → VPN Server (direct connection)
+         ↓
+   Reality protocol impersonates microsoft.com TLS
+   (censors see traffic to "microsoft.com")
 ```
 
 ### Domain Setup
 1. Purchase domain (~$10/year): e.g., `myvpn.xyz`
-2. Add to Cloudflare (free plan works)
-3. Create subdomains per location (all proxied - orange cloud):
+2. Add to Cloudflare (free plan - DNS management only)
+3. Create subdomains per location (all DNS-only - gray cloud):
 
 | Subdomain | Points to | Cloudflare | Purpose |
 |-----------|-----------|------------|---------|
-| `de.myvpn.xyz` | Frankfurt server IP | Proxied (orange) | VPN + landing page |
-| `us.myvpn.xyz` | New York server IP | Proxied (orange) | VPN + landing page |
-| `sg.myvpn.xyz` | Singapore server IP | Proxied (orange) | VPN + landing page |
-| `panel-de.myvpn.xyz` | Frankfurt server IP | DNS only (gray) | 3x-ui admin panel |
+| `de.myvpn.xyz` | Frankfurt server IP | DNS only (gray) | VLESS Reality (:443) + 3x-ui panel (:2053) |
+| `us.myvpn.xyz` | New York server IP | DNS only (gray) | VLESS Reality (:443) + 3x-ui panel (:2053) |
+| `sg.myvpn.xyz` | Singapore server IP | DNS only (gray) | VLESS Reality (:443) + 3x-ui panel (:2053) |
 
-### Cloudflare Settings
-- SSL/TLS: **Full (strict)**
-- Always Use HTTPS: **On**
-- WebSockets: **Enabled** (Settings → Network)
-- gRPC: **Enabled** (Settings → Network)
+### Port Usage
+- **Port 443** - VLESS Reality (VPN traffic)
+- **Port 2053** - 3x-ui admin panel (restrict via firewall to admin IPs)
 
-### Camouflage Landing Page
-Each server hosts a boring enterprise site at root path:
-```
-https://de.myvpn.xyz/           → Landing page (nginx)
-https://de.myvpn.xyz/ws-path    → VLESS WebSocket (Xray)
-https://de.myvpn.xyz/grpc-path  → VLESS gRPC (Xray)
-```
+### Why DNS-Only (Gray Cloud)?
+- Reality protocol requires direct TCP connection to server
+- Cloudflare proxy would interfere with Reality handshake
+- Camouflage is handled by Reality (impersonates legitimate sites like microsoft.com)
+- Server IP is visible but traffic looks like legitimate HTTPS to microsoft.com
 
-**Landing page content:** Generic enterprise SaaS (details TBD)
-
-*(Schema already includes domain, ws_path, grpc_service fields - see Section 2)*
+### TLS Certificates
+Using Let's Encrypt for the domain certificates:
+- Required for 3x-ui panel HTTPS access
+- Certificates auto-renew via certbot
 
 ---
 
@@ -343,16 +343,12 @@ https://de.myvpn.xyz/grpc-path  → VLESS gRPC (Xray)
 ### Server Stack
 ```
 ┌─────────────────────────────────────────┐
-│  Nginx (port 443)                       │
-│  ├── /            → Landing page        │
-│  ├── /ws-path     → Xray WebSocket      │
-│  └── /grpc-path   → Xray gRPC           │
-├─────────────────────────────────────────┤
 │  Xray-core (via 3x-ui)                  │
-│  ├── WebSocket inbound (127.0.0.1:10001)│
-│  └── gRPC inbound (127.0.0.1:10002)     │
+│  └── VLESS Reality inbound (port 443)   │
+│      - Impersonates microsoft.com       │
 ├─────────────────────────────────────────┤
 │  3x-ui Panel (port 2053)                │
+│  └── HTTPS with Let's Encrypt cert      │
 └─────────────────────────────────────────┘
 ```
 
@@ -363,80 +359,56 @@ https://de.myvpn.xyz/grpc-path  → VLESS gRPC (Xray)
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
 
-**2. Install Nginx + Certbot:**
+**2. Install Certbot (standalone mode):**
 ```bash
-apt install nginx certbot python3-certbot-nginx -y
+apt install certbot -y
 ```
 
-**3. Get SSL certificate (before enabling CF proxy):**
+**3. Get SSL certificate for panel:**
 ```bash
-# Temporarily set Cloudflare to DNS-only (gray cloud)
-certbot --nginx -d de.myvpn.xyz
-# Then enable Cloudflare proxy (orange cloud)
+# Ensure DNS is pointing to server (gray cloud in Cloudflare)
+# Stop any service on port 80 temporarily
+certbot certonly --standalone -d de.myvpn.xyz
 ```
 
-**4. Configure Nginx:**
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name de.myvpn.xyz;
+**4. Configure 3x-ui Panel to use Let's Encrypt:**
+In 3x-ui panel settings:
+- Certificate path: `/etc/letsencrypt/live/de.myvpn.xyz/fullchain.pem`
+- Key path: `/etc/letsencrypt/live/de.myvpn.xyz/privkey.pem`
 
-    ssl_certificate /etc/letsencrypt/live/de.myvpn.xyz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/de.myvpn.xyz/privkey.pem;
-
-    # Landing page (camouflage)
-    location / {
-        root /var/www/html;
-        index index.html;
-    }
-
-    # VLESS WebSocket
-    location /ws-secretpath {
-        proxy_pass http://127.0.0.1:10001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    # VLESS gRPC
-    location /grpc-secretpath {
-        grpc_pass grpc://127.0.0.1:10002;
-        grpc_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-**5. Configure 3x-ui Inbounds:**
-
-WebSocket inbound:
+**5. Configure VLESS Reality Inbound in 3x-ui:**
 - Protocol: VLESS
-- Listen IP: 127.0.0.1
-- Port: 10001
-- Transport: WebSocket
-- Path: /ws-secretpath
+- Port: 443
+- Transport: TCP
+- Security: Reality
+- Flow: `xtls-rprx-vision`
+- Dest: `microsoft.com:443` (or other popular site)
+- SNI: `microsoft.com`
+- Fingerprint: `chrome`
+- Generate Reality keys (public/private) in panel
 
-gRPC inbound:
-- Protocol: VLESS
-- Listen IP: 127.0.0.1
-- Port: 10002
-- Transport: gRPC
-- Service name: grpc-secretpath
-
-**6. Add landing page:**
+**6. Certificate Auto-Renewal:**
 ```bash
-# Place your enterprise landing page HTML here
-/var/www/html/index.html
+# Add cron job for renewal
+echo "0 3 * * * certbot renew --quiet && x-ui restart" | crontab -
 ```
 
-**7. Firewall (only expose necessary ports):**
+**7. Firewall:**
 ```bash
 ufw allow 22      # SSH
-ufw allow 443     # HTTPS (Nginx)
-ufw allow 2053    # 3x-ui panel (consider restricting to your IP)
+ufw allow 80      # HTTP (for certbot renewal)
+ufw allow 443     # VLESS Reality
+ufw allow 2053 from YOUR_ADMIN_IP  # 3x-ui panel (restrict to admin IPs)
 ufw enable
 ```
+
+### Reality SNI Targets (recommended)
+Choose popular sites that won't be blocked:
+- `microsoft.com`
+- `google.com`
+- `apple.com`
+- `cloudflare.com`
+- `amazon.com`
 
 ### Server Locations
 - Frankfurt, DE (Europe)
@@ -449,16 +421,16 @@ ufw enable
 
 ## 9. Security Considerations
 
-1. **Cloudflare Protection:**
-   - All VPN domains proxied (orange cloud) - server IPs hidden
-   - DDoS protection included
-   - WAF rules can block suspicious traffic
-   - 3x-ui panel domains NOT proxied (gray cloud) - access via IP or restricted domain
+1. **Reality Protocol Protection:**
+   - Traffic appears as legitimate HTTPS to popular sites (microsoft.com, etc.)
+   - TLS fingerprint matches real browsers
+   - No detectable VPN signatures
+   - Server IP visible but traffic is indistinguishable from normal HTTPS
 
 2. **Secrets Management:**
    - Store in Vercel environment variables
    - Encrypt 3x-ui passwords in database
-   - Randomize WS/gRPC paths per server (not guessable)
+   - Reality private keys stored securely on servers only
 
 3. **API Protection:**
    - Validate Telegram webhook secret
@@ -470,10 +442,10 @@ ufw enable
    - Prepared statements (Drizzle handles this)
 
 5. **VPN Servers:**
-   - Firewall: only expose port 443 (nginx) + 2053 (3x-ui, restrict to admin IP)
+   - Firewall: port 443 (Reality) + port 2053 (3x-ui, restrict to admin IPs)
    - Fail2ban for SSH protection
    - Regular security updates
-   - Nginx handles TLS termination
+   - Let's Encrypt certificates for panel HTTPS
 
 ---
 
