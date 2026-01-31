@@ -1,0 +1,25 @@
+{
+  "name": "vpn-server-manager",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.9.5",
+    "drizzle-orm": "^0.33.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@vercel/node": "^5.5.28",
+    "drizzle-kit": "^0.24.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
