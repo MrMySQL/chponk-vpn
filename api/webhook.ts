@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getBot } from "../src/bot/index.js";
+import { initBot } from "../src/bot/index.js";
 
 export default async function handler(
   req: VercelRequest,
@@ -11,7 +11,7 @@ export default async function handler(
   }
 
   try {
-    const bot = getBot();
+    const bot = await initBot();
     await bot.handleUpdate(req.body);
     res.status(200).json({ ok: true });
   } catch (error) {

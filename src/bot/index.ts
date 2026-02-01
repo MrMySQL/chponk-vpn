@@ -70,6 +70,7 @@ export function createBot(token: string): Bot<AuthContext> {
 
 // Singleton instance for serverless
 let botInstance: Bot<AuthContext> | null = null;
+let initPromise: Promise<void> | null = null;
 
 export function getBot(): Bot<AuthContext> {
   if (!botInstance) {
@@ -80,4 +81,13 @@ export function getBot(): Bot<AuthContext> {
     botInstance = createBot(token);
   }
   return botInstance;
+}
+
+export async function initBot(): Promise<Bot<AuthContext>> {
+  const bot = getBot();
+  if (!initPromise) {
+    initPromise = bot.init();
+  }
+  await initPromise;
+  return bot;
 }
