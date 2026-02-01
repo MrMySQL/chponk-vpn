@@ -96,15 +96,16 @@ export function getBot(): Bot<AuthContext> {
   if (!botInstance) {
     const useTestEnv = process.env.TELEGRAM_TEST_ENV === "true";
 
-    // Use test token if available and in development, otherwise use production token
-    const token =
-      process.env.NODE_ENV !== "production" && process.env.TEST_BOT_TOKEN
-        ? process.env.TEST_BOT_TOKEN
-        : process.env.BOT_TOKEN;
+    // Use test token when test environment is enabled, otherwise use production token
+    const token = useTestEnv
+      ? process.env.TEST_BOT_TOKEN
+      : process.env.BOT_TOKEN;
 
     if (!token) {
       throw new Error(
-        "BOT_TOKEN (or TEST_BOT_TOKEN in development) environment variable is not set"
+        useTestEnv
+          ? "TEST_BOT_TOKEN environment variable is not set (required when TELEGRAM_TEST_ENV=true)"
+          : "BOT_TOKEN environment variable is not set"
       );
     }
     botInstance = createBot(token, { useTestEnv });
