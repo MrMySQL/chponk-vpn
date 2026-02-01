@@ -494,11 +494,11 @@ Choose popular sites that won't be blocked:
 - [x] VLESS Reality config URL generator
 
 ### Phase 2: Multi-Server & Full Features
-- [ ] Add `user_connections` table (migration)
-- [ ] Update subscription to not require server_id
-- [ ] `/servers` command - list all available servers
-- [ ] `/connect` command - server selection + config generation
-- [ ] On-demand 3x-ui client creation (when user picks server)
+- [x] Add `user_connections` table (migration)
+- [x] Update subscription to not require server_id
+- [x] `/servers` command - list all available servers
+- [x] `/connect` command - server selection + config generation
+- [x] On-demand 3x-ui client creation (when user picks server)
 - [ ] QR code generation for configs
 - [ ] TON payment integration
 - [ ] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
