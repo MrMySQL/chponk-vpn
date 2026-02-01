@@ -5,13 +5,21 @@ import { plans } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
 
 export async function subscribeCommand(ctx: AuthContext): Promise<void> {
-  const activePlans = await db
-    .select()
-    .from(plans)
-    .where(eq(plans.isActive, true))
-    .orderBy(plans.durationDays);
+  let activePlans;
+  try {
+    activePlans = await db
+      .select()
+      .from(plans)
+      .where(eq(plans.isActive, true))
+      .orderBy(plans.durationDays);
+  } catch (error) {
+    console.error("Failed to fetch plans:", error);
+    await ctx.reply("Failed to load plans. Please try again later.");
+    return;
+  }
 
   if (activePlans.length === 0) {
+    console.log("No active plans found in database");
     await ctx.reply(
       "No subscription plans are currently available. Please check back later."
     );
