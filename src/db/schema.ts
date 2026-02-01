@@ -7,7 +7,7 @@ import {
   boolean,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 export const servers = pgTable("servers", {
   id: serial("id").primaryKey(),
@@ -83,7 +83,7 @@ export const subscriptions = pgTable("subscriptions", {
   expiresAt: timestamp("expires_at").notNull(),
   trafficUsedBytes: bigint("traffic_used_bytes", { mode: "bigint" })
     .notNull()
-    .default(0),
+    .default(sql`0`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
