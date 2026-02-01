@@ -24,6 +24,7 @@
     "drizzle-kit": "^0.24.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
+    "vite-tsconfig-paths": "^6.0.5",
     "vitest": "^2.0.5"
   }
 }

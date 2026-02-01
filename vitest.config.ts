@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  plugins: [tsconfigPaths()],
   test: {
     globals: true,
     environment: "node",
@@ -8,11 +10,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts", "api/**/*.ts"],
-    },
-  },
-  resolve: {
-    alias: {
-      "@": "./src",
     },
   },
 });
