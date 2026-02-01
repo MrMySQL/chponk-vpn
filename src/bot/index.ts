@@ -4,10 +4,19 @@ import { startCommand } from "./commands/start.js";
 import { subscribeCommand, handleShowPlans } from "./commands/subscribe.js";
 import { accountCommand, handleShowAccount } from "./commands/account.js";
 import {
+  serversCommand,
+  connectCommand,
+  handleShowServers,
+} from "./commands/servers.js";
+import {
   handleBuyPlan,
   handlePreCheckout,
   handleSuccessfulPayment,
 } from "./callbacks/payment.js";
+import {
+  handleServerConnect,
+  handleGetConnection,
+} from "./callbacks/server-connect.js";
 
 interface BotOptions {
   useTestEnv?: boolean;
@@ -36,19 +45,19 @@ export function createBot(
   bot.command("start", startCommand);
   bot.command("subscribe", subscribeCommand);
   bot.command("account", accountCommand);
+  bot.command("servers", serversCommand);
+  bot.command("connect", connectCommand);
 
   // Register callback handlers
   bot.callbackQuery("show_plans", handleShowPlans);
   bot.callbackQuery("show_account", handleShowAccount);
+  bot.callbackQuery("show_servers", handleShowServers);
+  bot.callbackQuery("get_connection", handleGetConnection);
 
-  // Placeholder handlers for features to be implemented
-  bot.callbackQuery("show_servers", async (ctx) => {
-    await ctx.answerCallbackQuery({
-      text: "Server list coming soon!",
-      show_alert: true,
-    });
-  });
+  // Handle server connection callbacks (connect_{serverId})
+  bot.callbackQuery(/^connect_(\d+)$/, handleServerConnect);
 
+  // Support handler
   bot.callbackQuery("show_support", async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
@@ -62,13 +71,6 @@ export function createBot(
         "3. Contact support: @your_support_username",
       { parse_mode: "Markdown" }
     );
-  });
-
-  bot.callbackQuery("get_connection", async (ctx) => {
-    await ctx.answerCallbackQuery({
-      text: "Connection link generation coming soon!",
-      show_alert: true,
-    });
   });
 
   // Handle plan purchase callbacks

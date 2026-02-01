@@ -123,7 +123,9 @@ export const userConnections = pgTable(
     xuiClientEmail: text("xui_client_email").notNull(), // Email/identifier in 3x-ui
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [unique().on(table.subscriptionId, table.serverId)]
+  (table) => ({
+    subscriptionServerUnique: unique().on(table.subscriptionId, table.serverId),
+  })
 );
 
 export type UserConnection = typeof userConnections.$inferSelect;

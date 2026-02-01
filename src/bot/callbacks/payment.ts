@@ -7,11 +7,7 @@ import { randomUUID } from "crypto";
 import type { Context } from "grammy";
 import type { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
-import { plans, subscriptions, payments, servers } from "../../db/schema.js";
-import {
-  getXuiClientForServer,
-  generateClientEmail,
-} from "../../services/xui/repository.js";
+import { plans, subscriptions, payments } from "../../db/schema.js";
 
 /**
  * Handle plan purchase button click - send invoice
@@ -90,18 +86,6 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
       return;
     }
 
-    // Check if there's an active server available
-    const activeServer = await db.query.servers.findFirst({
-      where: eq(servers.isActive, true),
-    });
-
-    if (!activeServer) {
-      await ctx.answerPreCheckoutQuery(false, {
-        error_message: "No servers available at the moment",
-      });
-      return;
-    }
-
     // All good - approve the payment
     await ctx.answerPreCheckoutQuery(true);
   } catch {
@@ -113,6 +97,8 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
 
 /**
  * Handle successful payment - activate subscription
+ * Note: 3x-ui client is NOT created here. It's created on-demand when user
+ * selects a server via /servers or /connect command.
  */
 export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
   const payment = ctx.message?.successful_payment;
@@ -131,7 +117,7 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
       // Already processed this payment, just acknowledge
       await ctx.reply(
         "✅ Your subscription is already active!\n\n" +
-          "Use /account to view your subscription details."
+          "Use /servers to connect to a VPN server."
       );
       return;
     }
@@ -151,21 +137,8 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
       return;
     }
 
-    // Get an active server (for now, just pick the first one)
-    const server = await db.query.servers.findFirst({
-      where: eq(servers.isActive, true),
-    });
-
-    if (!server) {
-      await ctx.reply(
-        "Payment received but no servers available. Please contact support for a refund."
-      );
-      return;
-    }
-
-    // Generate client UUID
+    // Generate client UUID (shared across all servers)
     const clientUuid = randomUUID();
-    const clientEmail = generateClientEmail(userId);
 
     // Calculate expiry
     const startsAt = new Date();
@@ -195,25 +168,6 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
       providerId: payment.telegram_payment_charge_id,
     });
 
-    // Add client to 3x-ui panel
-    try {
-      const xuiClient = await getXuiClientForServer(server.id);
-
-      // Calculate traffic limit in bytes (0 = unlimited)
-      const totalGB = plan.trafficLimitGb ?? 0;
-
-      await xuiClient.addClient({
-        uuid: clientUuid,
-        email: clientEmail,
-        totalGB,
-        expiryTime: expiresAt.getTime(),
-        limitIp: plan.maxDevices,
-      });
-    } catch (xuiError) {
-      console.error("Failed to add client to 3x-ui:", xuiError);
-      // Don't fail the whole flow - subscription is created, can be fixed manually
-    }
-
     // Send success message
     const traffic =
       plan.trafficLimitGb === null ? "Unlimited" : `${plan.trafficLimitGb} GB`;
@@ -224,7 +178,7 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
         `📅 Valid until: ${expiresAt.toLocaleDateString()}\n` +
         `📊 Traffic: ${traffic}\n` +
         `📱 Devices: ${plan.maxDevices}\n\n` +
-        `Use /account to view your subscription and get your connection link.`,
+        `🌍 Use /servers to choose a server and get your connection link.`,
       { parse_mode: "Markdown" }
     );
   } catch (error) {
