@@ -6,6 +6,7 @@ import {
   bigint,
   boolean,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -108,6 +109,26 @@ export const payments = pgTable("payments", {
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 
+// User connections - tracks 3x-ui client creation per server
+export const userConnections = pgTable(
+  "user_connections",
+  {
+    id: serial("id").primaryKey(),
+    subscriptionId: integer("subscription_id")
+      .notNull()
+      .references(() => subscriptions.id),
+    serverId: integer("server_id")
+      .notNull()
+      .references(() => servers.id),
+    xuiClientEmail: text("xui_client_email").notNull(), // Email/identifier in 3x-ui
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.subscriptionId, table.serverId)]
+);
+
+export type UserConnection = typeof userConnections.$inferSelect;
+export type NewUserConnection = typeof userConnections.$inferInsert;
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
@@ -130,6 +151,7 @@ export const subscriptionsRelations = relations(
       references: [plans.id],
     }),
     payments: many(payments),
+    connections: many(userConnections),
   })
 );
 
@@ -143,3 +165,21 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     references: [subscriptions.id],
   }),
 }));
+
+export const serversRelations = relations(servers, ({ many }) => ({
+  connections: many(userConnections),
+}));
+
+export const userConnectionsRelations = relations(
+  userConnections,
+  ({ one }) => ({
+    subscription: one(subscriptions, {
+      fields: [userConnections.subscriptionId],
+      references: [subscriptions.id],
+    }),
+    server: one(servers, {
+      fields: [userConnections.serverId],
+      references: [servers.id],
+    }),
+  })
+);
