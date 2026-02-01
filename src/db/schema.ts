@@ -18,6 +18,7 @@ export const servers = pgTable("servers", {
   domain: text("domain").notNull().unique(),
 
   xuiPort: integer("xui_port").notNull().default(2053),
+  xuiBasePath: text("xui_base_path"), // custom panel path, e.g., "/panel-abc123"
   xuiUsername: text("xui_username").notNull(),
   xuiPassword: text("xui_password").notNull(), // encrypted
 

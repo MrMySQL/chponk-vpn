@@ -7,6 +7,7 @@ import { XuiAuthError, XuiNetworkError, XuiApiError } from "./errors";
 
 export class XuiHttpClient {
   private readonly baseUrl: string;
+  private readonly basePath: string;
   private readonly username: string;
   private readonly password: string;
   private sessionCookie: string | null = null;
@@ -14,6 +15,7 @@ export class XuiHttpClient {
   constructor(config: XuiServerConfig) {
     const protocol = config.secure ? "https" : "http";
     this.baseUrl = `${protocol}://${config.host}:${config.port}`;
+    this.basePath = config.basePath?.replace(/\/$/, "") || "";
     this.username = config.username;
     this.password = config.password;
   }
@@ -22,7 +24,7 @@ export class XuiHttpClient {
    * Authenticate with the 3x-ui panel and store session cookie
    */
   async login(): Promise<void> {
-    const url = `${this.baseUrl}/login`;
+    const url = `${this.baseUrl}${this.basePath}/login`;
 
     let response: Response;
     try {
@@ -105,7 +107,7 @@ export class XuiHttpClient {
     path: string,
     body?: Record<string, unknown> | URLSearchParams
   ): Promise<{ data?: T; needsReauth?: boolean }> {
-    const url = `${this.baseUrl}${path}`;
+    const url = `${this.baseUrl}${this.basePath}${path}`;
 
     const headers: Record<string, string> = {
       Cookie: this.sessionCookie!,

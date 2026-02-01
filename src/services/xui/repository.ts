@@ -58,6 +58,7 @@ export function createClientFromServer(server: Server): XuiClient {
     password: decrypt(server.xuiPassword),
     inboundId: server.inboundId,
     secure: true, // Assume HTTPS for panel
+    basePath: server.xuiBasePath || undefined,
   };
 
   return new XuiClient(config);

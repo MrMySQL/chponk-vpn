@@ -135,4 +135,6 @@ export interface XuiServerConfig {
   inboundId: number;
   /** Use HTTPS for panel connection */
   secure?: boolean;
+  /** Custom panel path prefix (e.g., "/panel-abc123") */
+  basePath?: string;
 }
