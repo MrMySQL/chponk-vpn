@@ -9,6 +9,7 @@ A production-ready VPN service with Telegram bot interface, supporting VLESS Rea
 - **TLS:** Let's Encrypt certificates
 - **Camouflage:** Reality protocol impersonates legitimate websites (e.g., microsoft.com)
 - **Target users:** Regions with active VPN blocking (China, Iran, Russia)
+- **Subscription model:** Pay once, access ALL servers, switch freely between locations
 
 ---
 
@@ -32,9 +33,8 @@ vpn/
 │   │   │   ├── addserver.ts      # /addserver - register server
 │   │   │   └── users.ts          # /users - user management
 │   │   ├── callbacks/
-│   │   │   ├── payment.ts        # Payment callbacks
-│   │   │   ├── server-select.ts  # Server selection
-│   │   │   └── plan-select.ts    # Plan selection
+│   │   │   ├── payment.ts        # Payment callbacks (Stars/TON)
+│   │   │   └── server-connect.ts # Server selection + config generation
 │   │   └── middleware/
 │   │       ├── auth.ts           # User authentication
 │   │       └── admin.ts          # Admin check
@@ -122,19 +122,27 @@ CREATE TABLE servers (
   max_capacity INTEGER DEFAULT 100
 );
 
--- User Subscriptions
+-- User Subscriptions (not tied to specific server - access ALL servers)
 CREATE TABLE subscriptions (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
   plan_id INTEGER REFERENCES plans(id),
-  server_id INTEGER REFERENCES servers(id),
-  xui_client_id UUID,                  -- UUID in 3x-ui
-  subscription_url TEXT,               -- Generated sub link
+  client_uuid UUID NOT NULL,           -- Shared UUID across all servers
   status VARCHAR(20) DEFAULT 'active', -- active, expired, cancelled
   starts_at TIMESTAMP DEFAULT NOW(),
   expires_at TIMESTAMP NOT NULL,
   traffic_used_bytes BIGINT DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- User connections to servers (tracks 3x-ui client creation per server)
+CREATE TABLE user_connections (
+  id SERIAL PRIMARY KEY,
+  subscription_id INTEGER REFERENCES subscriptions(id),
+  server_id INTEGER REFERENCES servers(id),
+  xui_client_email VARCHAR(255),       -- Email/identifier in 3x-ui
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(subscription_id, server_id)   -- One connection per server per subscription
 );
 
 -- Payments
@@ -154,6 +162,8 @@ CREATE INDEX idx_users_telegram_id ON users(telegram_id);
 CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX idx_subscriptions_expires ON subscriptions(expires_at);
 CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_user_connections_subscription ON user_connections(subscription_id);
+CREATE INDEX idx_user_connections_server ON user_connections(server_id);
 ```
 
 ---
@@ -216,13 +226,26 @@ class XuiClient {
 1. User selects plan → Bot sends invoice via `sendInvoice()`
 2. Telegram handles payment
 3. Bot receives `pre_checkout_query` → validate
-4. Bot receives `successful_payment` → activate subscription
+4. Bot receives `successful_payment` → create subscription with unique UUID
+5. User can now connect to ANY server via `/connect`
 
 **TON Payments:**
 1. User selects plan → Generate unique payment comment
 2. Show TON wallet address + amount + comment
 3. Backend monitors blockchain for payment
-4. On confirmation → activate subscription
+4. On confirmation → create subscription with unique UUID
+5. User can now connect to ANY server via `/connect`
+
+### 3.4 Server Connection Flow (Post-Payment)
+
+1. User runs `/connect` or `/servers`
+2. Bot shows list of all available servers with flags
+3. User selects a server
+4. Bot checks if user already has connection to this server:
+   - **If yes:** Return existing VLESS config URL
+   - **If no:** Create client in 3x-ui, save to `user_connections`, return config URL
+5. User can switch servers anytime - just select different server
+6. Same UUID is used across all servers for simplicity
 
 ---
 
@@ -232,11 +255,20 @@ class XuiClient {
 | Command | Description |
 |---------|-------------|
 | `/start` | Welcome + register user |
-| `/subscribe` | Show available plans |
-| `/account` | Current subscription status |
-| `/servers` | List available locations |
-| `/connect` | Get subscription link |
+| `/subscribe` | Show available plans + purchase |
+| `/account` | Current subscription status + quick connect buttons |
+| `/servers` | List all servers + connect to any (requires active subscription) |
+| `/connect` | Alias for `/servers` - pick server and get config |
 | `/support` | Help and FAQ |
+
+### User Flow:
+```
+/subscribe → Pick plan → Pay with Stars/TON → Subscription activated
+                                                      ↓
+/servers or /connect → Pick server → Get VLESS config (auto-created in 3x-ui)
+                                                      ↓
+                              User can switch servers anytime (same subscription)
+```
 
 ### Admin Commands:
 | Command | Description |
@@ -269,15 +301,17 @@ vless://abc123-uuid@de.myvpn.xyz:443?encryption=none&flow=xtls-rprx-vision&secur
 - `pbk` - Reality public key from server
 - `sid` - Short ID for additional security
 
-### Bot Flow
-1. Generate unique UUID for user
-2. Create client in 3x-ui via API
-3. Build VLESS Reality subscription URL with server's Reality keys
-4. Store in database
-5. Return to user as:
-   - Clickable link
+### Bot Flow (On Server Selection)
+1. Check user has active subscription
+2. Get subscription's UUID (same UUID used for all servers)
+3. Check if client exists on selected server (via `user_connections` table)
+4. If not exists: Create client in 3x-ui via API, save to `user_connections`
+5. Build VLESS Reality subscription URL with server's Reality keys
+6. Return to user as:
+   - Clickable link (opens in v2rayNG/Streisand)
    - QR code image
    - Copy-paste text
+7. User can repeat for other servers - same UUID, different server configs
 
 ---
 
@@ -451,30 +485,36 @@ Choose popular sites that won't be blocked:
 
 ## 10. Implementation Phases
 
-### Phase 1: Foundation (MVP)
-- [ ] Initialize Vercel + TypeScript project
-- [ ] Set up Neon database + Drizzle schema
-- [ ] Basic bot with /start, /subscribe, /account
-- [ ] Single server integration with 3x-ui
-- [ ] Telegram Stars payment
+### Phase 1: Foundation (MVP) ✅
+- [x] Initialize Vercel + TypeScript project
+- [x] Set up Neon database + Drizzle schema
+- [x] Basic bot with /start, /subscribe, /account
+- [x] 3x-ui API client integration
+- [x] Telegram Stars payment flow
+- [x] VLESS Reality config URL generator
 
-### Phase 2: Full Features
-- [ ] Multi-server support with location selection
+### Phase 2: Multi-Server & Full Features
+- [ ] Add `user_connections` table (migration)
+- [ ] Update subscription to not require server_id
+- [ ] `/servers` command - list all available servers
+- [ ] `/connect` command - server selection + config generation
+- [ ] On-demand 3x-ui client creation (when user picks server)
+- [ ] QR code generation for configs
 - [ ] TON payment integration
-- [ ] Subscription link generation + QR codes
-- [ ] Auto-expiry handling (cron job)
+- [ ] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
 
 ### Phase 3: Admin & Polish
-- [ ] Admin bot commands
+- [ ] Admin bot commands (/stats, /broadcast, /addserver, /ban, /gift)
 - [ ] Web admin dashboard
 - [ ] Usage statistics and analytics
-- [ ] Broadcast messaging
+- [ ] Traffic tracking per user (aggregate from all servers)
 
 ### Phase 4: Production Hardening
 - [ ] Error monitoring (Sentry)
 - [ ] Logging and alerting
 - [ ] Backup strategy
 - [ ] Load testing
+- [ ] Rate limiting
 
 ---
 
@@ -497,8 +537,10 @@ Choose popular sites that won't be blocked:
 
 4. **End-to-End:**
    - Complete purchase flow with Telegram Stars
-   - Connect to VPN with generated link
-   - Verify traffic tracking
+   - Select server via /connect
+   - Connect to VPN with generated VLESS config
+   - Switch to different server (verify new config works)
+   - Verify traffic tracking across servers
 
 ---
 
