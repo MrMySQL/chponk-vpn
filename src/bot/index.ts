@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, type BotConfig } from "grammy";
 import { authMiddleware, AuthContext } from "./middleware/auth.js";
 import { startCommand } from "./commands/start.js";
 import { subscribeCommand, handleShowPlans } from "./commands/subscribe.js";
@@ -9,8 +9,25 @@ import {
   handleSuccessfulPayment,
 } from "./callbacks/payment.js";
 
-export function createBot(token: string): Bot<AuthContext> {
-  const bot = new Bot<AuthContext>(token);
+interface BotOptions {
+  useTestEnv?: boolean;
+}
+
+export function createBot(
+  token: string,
+  options: BotOptions = {}
+): Bot<AuthContext> {
+  const config: BotConfig<AuthContext> = {};
+
+  // Use Telegram's test environment if specified
+  // Note: Test environment requires a bot created via @BotFather in the test Telegram app
+  if (options.useTestEnv) {
+    config.client = {
+      environment: "test",
+    };
+  }
+
+  const bot = new Bot<AuthContext>(token, config);
 
   // Register middleware
   bot.use(authMiddleware);
@@ -77,11 +94,20 @@ let initPromise: Promise<void> | null = null;
 
 export function getBot(): Bot<AuthContext> {
   if (!botInstance) {
-    const token = process.env.BOT_TOKEN;
+    const useTestEnv = process.env.TELEGRAM_TEST_ENV === "true";
+
+    // Use test token if available and in development, otherwise use production token
+    const token =
+      process.env.NODE_ENV !== "production" && process.env.TEST_BOT_TOKEN
+        ? process.env.TEST_BOT_TOKEN
+        : process.env.BOT_TOKEN;
+
     if (!token) {
-      throw new Error("BOT_TOKEN environment variable is not set");
+      throw new Error(
+        "BOT_TOKEN (or TEST_BOT_TOKEN in development) environment variable is not set"
+      );
     }
-    botInstance = createBot(token);
+    botInstance = createBot(token, { useTestEnv });
   }
   return botInstance;
 }
