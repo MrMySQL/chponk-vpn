@@ -2,8 +2,8 @@
  * Low-level HTTP client for 3x-ui API with cookie-based session management
  */
 
-import type { XuiServerConfig, XuiApiResponse } from "./types";
-import { XuiAuthError, XuiNetworkError, XuiApiError } from "./errors";
+import type { XuiServerConfig, XuiApiResponse } from "./types.js";
+import { XuiAuthError, XuiNetworkError, XuiApiError } from "./errors.js";
 
 export class XuiHttpClient {
   private readonly baseUrl: string;

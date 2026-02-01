@@ -2,7 +2,7 @@
  * VLESS Reality configuration URL generator
  */
 
-import type { Server } from "../db/schema";
+import type { Server } from "../db/schema.js";
 
 /** Error class for config generation failures */
 export class ConfigGeneratorError extends Error {

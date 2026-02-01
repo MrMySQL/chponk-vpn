@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { XuiHttpClient } from "./client";
+import { XuiHttpClient } from "./client.js";
 import {
   XuiNotFoundError,
   XuiValidationError,
@@ -13,7 +13,7 @@ import {
   XuiAuthError,
   XuiNetworkError,
   XuiApiError,
-} from "./errors";
+} from "./errors.js";
 import type {
   XuiServerConfig,
   XuiClient as XuiClientType,
@@ -22,11 +22,11 @@ import type {
   Inbound,
   InboundSettings,
   InboundStats,
-} from "./types";
+} from "./types.js";
 
 // Re-export types and errors
-export * from "./types";
-export * from "./errors";
+export * from "./types.js";
+export * from "./errors.js";
 
 export class XuiClient {
   private readonly http: XuiHttpClient;

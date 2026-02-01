@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { servers, type Server } from "../../db/schema.js";
 import { decrypt } from "../../lib/crypto.js";
-import { XuiClient, type XuiServerConfig } from "./index";
-import { XuiNotFoundError } from "./errors";
+import { XuiClient, type XuiServerConfig } from "./index.js";
+import { XuiNotFoundError } from "./errors.js";
 
 /** In-memory cache of XuiClient instances per server */
 const clientCache = new Map<number, XuiClient>();
