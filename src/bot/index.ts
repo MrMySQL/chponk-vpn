@@ -3,6 +3,11 @@ import { authMiddleware, AuthContext } from "./middleware/auth.js";
 import { startCommand } from "./commands/start.js";
 import { subscribeCommand, handleShowPlans } from "./commands/subscribe.js";
 import { accountCommand, handleShowAccount } from "./commands/account.js";
+import {
+  handleBuyPlan,
+  handlePreCheckout,
+  handleSuccessfulPayment,
+} from "./callbacks/payment.js";
 
 export function createBot(token: string): Bot<AuthContext> {
   const bot = new Bot<AuthContext>(token);
@@ -50,13 +55,11 @@ export function createBot(token: string): Bot<AuthContext> {
   });
 
   // Handle plan purchase callbacks
-  bot.callbackQuery(/^buy_(\d+)$/, async (ctx) => {
-    const planId = ctx.match[1];
-    await ctx.answerCallbackQuery({
-      text: `Payment for plan ${planId} coming soon!`,
-      show_alert: true,
-    });
-  });
+  bot.callbackQuery(/^buy_(\d+)$/, handleBuyPlan);
+
+  // Handle Telegram Stars payment flow
+  bot.on("pre_checkout_query", handlePreCheckout);
+  bot.on("message:successful_payment", handleSuccessfulPayment);
 
   // Handle unknown callbacks
   bot.on("callback_query:data", async (ctx) => {
