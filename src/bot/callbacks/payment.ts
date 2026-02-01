@@ -119,8 +119,23 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
   if (!payment) return;
 
   const userId = ctx.user.id;
+  const chargeId = payment.telegram_payment_charge_id;
 
   try {
+    // Idempotency check - prevent duplicate processing from Telegram retries
+    const existingPayment = await db.query.payments.findFirst({
+      where: eq(payments.providerId, chargeId),
+    });
+
+    if (existingPayment) {
+      // Already processed this payment, just acknowledge
+      await ctx.reply(
+        "✅ Your subscription is already active!\n\n" +
+          "Use /account to view your subscription details."
+      );
+      return;
+    }
+
     // Parse payload
     const payload = JSON.parse(payment.invoice_payload) as { planId: number };
 
