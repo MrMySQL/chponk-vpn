@@ -501,7 +501,7 @@ Choose popular sites that won't be blocked:
 - [x] On-demand 3x-ui client creation (when user picks server)
 - [ ] QR code generation for configs
 - [ ] TON payment integration
-- [ ] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
+- [x] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
 
 ### Phase 3: Admin & Polish
 - [ ] Admin bot commands (/stats, /broadcast, /addserver, /ban, /gift)

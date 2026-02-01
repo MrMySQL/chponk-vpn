@@ -3,5 +3,11 @@
     "api/**/*.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-expired",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
