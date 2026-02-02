@@ -9,13 +9,12 @@
  * 4. Cancel the old subscription
  */
 
-import { eq, and, gt, desc } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   subscriptions,
   userConnections,
   payments,
-  plans,
   type Subscription,
   type Plan,
   type UserConnection,
@@ -29,7 +28,7 @@ export interface UpgradeResult {
   failedServers: number;
 }
 
-interface ExistingSubscriptionWithConnections extends Subscription {
+export interface ExistingSubscriptionWithConnections extends Subscription {
   plan: Plan;
   connections: UserConnection[];
 }
@@ -37,40 +36,20 @@ interface ExistingSubscriptionWithConnections extends Subscription {
 /**
  * Upgrade an existing subscription to a new plan.
  * Preserves the clientUuid so VPN configs continue working.
+ *
+ * @param userId - The user's ID
+ * @param newPlan - The new plan to upgrade to (pre-fetched to avoid duplicate query)
+ * @param existingSubscription - The existing subscription with connections (pre-fetched)
+ * @param paymentChargeId - Telegram payment charge ID
+ * @param paymentAmount - Payment amount in stars
  */
 export async function upgradeSubscription(
   userId: number,
-  newPlanId: number,
+  newPlan: Plan,
+  existingSubscription: ExistingSubscriptionWithConnections,
   paymentChargeId: string,
   paymentAmount: string
 ): Promise<UpgradeResult> {
-  // Find existing active subscription with connections
-  const existingSubscription =
-    (await db.query.subscriptions.findFirst({
-      where: and(
-        eq(subscriptions.userId, userId),
-        eq(subscriptions.status, "active"),
-        gt(subscriptions.expiresAt, new Date())
-      ),
-      with: {
-        plan: true,
-        connections: true,
-      },
-      orderBy: [desc(subscriptions.createdAt)],
-    })) as ExistingSubscriptionWithConnections | undefined;
-
-  if (!existingSubscription) {
-    throw new Error("No active subscription found to upgrade");
-  }
-
-  // Get the new plan
-  const newPlan = await db.query.plans.findFirst({
-    where: eq(plans.id, newPlanId),
-  });
-
-  if (!newPlan) {
-    throw new Error("New plan not found");
-  }
 
   // Calculate new expiry - extend from current expiry to reward early upgraders
   const newExpiresAt = new Date(existingSubscription.expiresAt);
@@ -81,7 +60,7 @@ export async function upgradeSubscription(
     .insert(subscriptions)
     .values({
       userId,
-      planId: newPlanId,
+      planId: newPlan.id,
       clientUuid: existingSubscription.clientUuid, // Preserve UUID!
       status: "active",
       startsAt: new Date(),

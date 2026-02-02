@@ -8,7 +8,10 @@ import type { Context } from "grammy";
 import type { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
 import { plans, subscriptions, payments } from "../../db/schema.js";
-import { upgradeSubscription } from "../../services/subscription-upgrade.js";
+import {
+  upgradeSubscription,
+  type ExistingSubscriptionWithConnections,
+} from "../../services/subscription-upgrade.js";
 
 /**
  * Handle plan purchase button click - send invoice
@@ -140,20 +143,24 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
     }
 
     // Check for existing active subscription to determine upgrade vs new purchase
-    const existingSubscription = await db.query.subscriptions.findFirst({
-      where: and(
-        eq(subscriptions.userId, userId),
-        eq(subscriptions.status, "active"),
-        gt(subscriptions.expiresAt, new Date())
-      ),
-      with: { plan: true },
-    });
+    // Include connections for the upgrade path to avoid a second query
+    const existingSubscription =
+      (await db.query.subscriptions.findFirst({
+        where: and(
+          eq(subscriptions.userId, userId),
+          eq(subscriptions.status, "active"),
+          gt(subscriptions.expiresAt, new Date())
+        ),
+        with: { plan: true, connections: true },
+      })) as ExistingSubscriptionWithConnections | undefined;
 
     if (existingSubscription) {
       // UPGRADE PATH - reuse clientUuid, update limits on servers
+      // Pass pre-fetched plan and subscription to avoid duplicate queries
       const result = await upgradeSubscription(
         userId,
-        payload.planId,
+        plan,
+        existingSubscription,
         chargeId,
         String(payment.total_amount)
       );
