@@ -342,14 +342,34 @@ class ApiClient {
 
   // Traffic Sync
   async syncTraffic() {
-    return this.request<{
-      serversProcessed: number;
-      connectionsUpdated: number;
-      totalBytesUp: string;
-      totalBytesDown: string;
-    }>("/sync-traffic", {
+    // Call the cron endpoint directly with admin JWT auth
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch("/api/cron/sync-traffic", {
       method: "POST",
+      headers,
     });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+
+    return {
+      success: data.ok,
+      data: data.stats as {
+        serversProcessed: number;
+        connectionsUpdated: number;
+        totalBytesUp: string;
+        totalBytesDown: string;
+      },
+    };
   }
 }
 

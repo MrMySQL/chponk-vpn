@@ -1,27 +1,40 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { syncTrafficFromAllServers } from "../../src/services/traffic-sync.js";
+import { verifyJWT } from "../../src/lib/jwt.js";
 
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  // Only allow GET requests (Vercel cron uses GET)
-  if (req.method !== "GET") {
+  // Allow GET (Vercel cron) and POST (admin panel)
+  if (req.method !== "GET" && req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  // Verify cron secret - required for both Vercel cron and manual requests
-  // Vercel cron automatically sends Authorization header when CRON_SECRET is set
+  // Verify authorization - accept either CRON_SECRET or admin JWT
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret) {
-    res.status(500).json({ error: "CRON_SECRET not configured" });
-    return;
+  let isAuthorized = false;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+
+    // Check if it's the cron secret
+    if (cronSecret && token === cronSecret) {
+      isAuthorized = true;
+    } else {
+      // Try to verify as admin JWT
+      const payload = verifyJWT(token);
+      if (payload?.isAdmin) {
+        isAuthorized = true;
+        console.log(`Traffic sync triggered by admin ${payload.telegramId}`);
+      }
+    }
   }
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorized) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
