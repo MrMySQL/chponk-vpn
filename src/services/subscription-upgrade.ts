@@ -10,7 +10,6 @@
  */
 
 import { eq, and, gt } from "drizzle-orm";
-import { db } from "../db/index.js";
 import {
   subscriptions,
   userConnections,
@@ -19,7 +18,8 @@ import {
   type Plan,
   type UserConnection,
 } from "../db/schema.js";
-import { getXuiClientForServer } from "./xui/repository.js";
+import { defaultDependencies } from "./dependencies.js";
+import type { ServiceDependencies } from "./types.js";
 
 export interface UpgradeResult {
   newSubscription: Subscription;
@@ -42,14 +42,17 @@ export interface ExistingSubscriptionWithConnections extends Subscription {
  * @param existingSubscription - The existing subscription with connections (pre-fetched)
  * @param paymentChargeId - Telegram payment charge ID
  * @param paymentAmount - Payment amount in stars
+ * @param deps - Optional dependencies for testing
  */
 export async function upgradeSubscription(
   userId: number,
   newPlan: Plan,
   existingSubscription: ExistingSubscriptionWithConnections,
   paymentChargeId: string,
-  paymentAmount: string
+  paymentAmount: string,
+  deps: ServiceDependencies = defaultDependencies
 ): Promise<UpgradeResult> {
+  const { db, getXuiClient } = deps;
 
   // Calculate new expiry - extend from current expiry to reward early upgraders
   const newExpiresAt = new Date(existingSubscription.expiresAt);
@@ -94,7 +97,7 @@ export async function upgradeSubscription(
 
   for (const connection of connections) {
     try {
-      const xuiClient = await getXuiClientForServer(connection.serverId);
+      const xuiClient = await getXuiClient(connection.serverId);
 
       await xuiClient.updateClient(existingSubscription.clientUuid, {
         totalGB: newPlan.trafficLimitGb ?? 0,
@@ -129,10 +132,16 @@ export async function upgradeSubscription(
 
 /**
  * Check if a user has an active subscription that can be upgraded
+ *
+ * @param userId - The user's ID
+ * @param deps - Optional dependencies for testing
  */
 export async function hasUpgradeableSubscription(
-  userId: number
+  userId: number,
+  deps: Pick<ServiceDependencies, "db"> = defaultDependencies
 ): Promise<boolean> {
+  const { db } = deps;
+
   const subscription = await db.query.subscriptions.findFirst({
     where: and(
       eq(subscriptions.userId, userId),

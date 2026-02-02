@@ -4,11 +4,10 @@
  */
 
 import { and, eq, lt } from "drizzle-orm";
-import { db } from "../db/index.js";
 import { subscriptions, userConnections } from "../db/schema.js";
-import { getXuiClientForServer } from "./xui/repository.js";
 import { XuiNotFoundError, XuiError } from "./xui/errors.js";
-import { getBot } from "../bot/index.js";
+import { defaultCleanupDependencies } from "./dependencies.js";
+import type { CleanupDependencies } from "./types.js";
 
 export interface CleanupStats {
   processed: number;
@@ -28,8 +27,14 @@ export interface CleanupResult {
  * - Deletes 3x-ui clients from all connected servers
  * - Updates subscription status to 'expired'
  * - Sends expiry notification to users via Telegram
+ *
+ * @param deps - Optional dependencies for testing
  */
-export async function cleanupExpiredSubscriptions(): Promise<CleanupResult> {
+export async function cleanupExpiredSubscriptions(
+  deps: CleanupDependencies = defaultCleanupDependencies
+): Promise<CleanupResult> {
+  const { db, getXuiClient, getBot } = deps;
+
   const stats: CleanupStats = {
     processed: 0,
     failed: 0,
@@ -59,7 +64,7 @@ export async function cleanupExpiredSubscriptions(): Promise<CleanupResult> {
       // Delete clients from all connected servers
       for (const connection of subscription.connections) {
         try {
-          const xuiClient = await getXuiClientForServer(connection.serverId);
+          const xuiClient = await getXuiClient(connection.serverId);
           await xuiClient.deleteClient(subscription.clientUuid);
           stats.clientsDeleted++;
           console.log(

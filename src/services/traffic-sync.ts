@@ -3,15 +3,15 @@
  * Syncs traffic data from 3x-ui servers and stores it per-connection
  */
 
-import { eq, and, sql } from "drizzle-orm";
-import { db } from "../db/index.js";
+import { eq, and } from "drizzle-orm";
 import {
   userConnections,
   subscriptions,
   servers,
   type UserConnection,
 } from "../db/schema.js";
-import { getXuiClientForServer } from "./xui/repository.js";
+import { defaultDependencies } from "./dependencies.js";
+import type { ServiceDependencies } from "./types.js";
 
 export interface TrafficSyncResult {
   serversProcessed: number;
@@ -30,8 +30,14 @@ export interface AggregatedTraffic {
 
 /**
  * Sync traffic data from all 3x-ui servers for all active connections
+ *
+ * @param deps - Optional dependencies for testing
  */
-export async function syncTrafficFromAllServers(): Promise<TrafficSyncResult> {
+export async function syncTrafficFromAllServers(
+  deps: ServiceDependencies = defaultDependencies
+): Promise<TrafficSyncResult> {
+  const { db, getXuiClient } = deps;
+
   const result: TrafficSyncResult = {
     serversProcessed: 0,
     connectionsUpdated: 0,
@@ -76,7 +82,7 @@ export async function syncTrafficFromAllServers(): Promise<TrafficSyncResult> {
           errors: [] as string[],
         };
 
-        const xuiClient = await getXuiClientForServer(serverId);
+        const xuiClient = await getXuiClient(serverId);
 
         // Fetch all client traffic in one API call
         const trafficMap = await xuiClient.getAllClientTraffic();
@@ -137,10 +143,16 @@ export async function syncTrafficFromAllServers(): Promise<TrafficSyncResult> {
 /**
  * Sync traffic for a specific user's active subscriptions
  * Used for on-demand refresh
+ *
+ * @param userId - The user's ID
+ * @param deps - Optional dependencies for testing
  */
 export async function syncUserTraffic(
-  userId: number
+  userId: number,
+  deps: ServiceDependencies = defaultDependencies
 ): Promise<TrafficSyncResult> {
+  const { db, getXuiClient } = deps;
+
   const result: TrafficSyncResult = {
     serversProcessed: 0,
     connectionsUpdated: 0,
@@ -192,7 +204,7 @@ export async function syncUserTraffic(
           errors: [] as string[],
         };
 
-        const xuiClient = await getXuiClientForServer(serverId);
+        const xuiClient = await getXuiClient(serverId);
 
         // Fetch all client traffic in one API call
         const trafficMap = await xuiClient.getAllClientTraffic();
@@ -251,10 +263,16 @@ export async function syncUserTraffic(
 
 /**
  * Get aggregated traffic for a subscription across all servers
+ *
+ * @param subscriptionId - The subscription ID
+ * @param deps - Optional dependencies for testing (only db needed)
  */
 export async function getAggregatedTraffic(
-  subscriptionId: number
+  subscriptionId: number,
+  deps: Pick<ServiceDependencies, "db"> = defaultDependencies
 ): Promise<AggregatedTraffic> {
+  const { db } = deps;
+
   const connections = await db
     .select({
       trafficUp: userConnections.trafficUp,
