@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
+import { serialize as serializeCookie } from "cookie";
 import { db } from "../../src/db/index.js";
 import { users } from "../../src/db/schema.js";
-import { signJWT, validateTelegramAuth } from "../../src/lib/jwt.js";
+import { signJWT, validateTelegramAuth, generateCsrfToken } from "../../src/lib/jwt.js";
 import { methodNotAllowed } from "./middleware.js";
 
 interface TelegramAuthData {
@@ -96,10 +97,26 @@ export default async function handler(
       isAdmin: true,
     });
 
+    // Generate CSRF token
+    const csrfToken = generateCsrfToken();
+
+    // Set CSRF token cookie
+    res.setHeader(
+      "Set-Cookie",
+      serializeCookie("csrf_token", csrfToken, {
+        httpOnly: false, // Must be readable by JS for double-submit pattern
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/api/admin",
+        maxAge: 24 * 60 * 60, // 24 hours (matches JWT expiry)
+      })
+    );
+
     return res.status(200).json({
       success: true,
       data: {
         token,
+        csrfToken,
         user: {
           id: user.id,
           telegramId: authData.id,

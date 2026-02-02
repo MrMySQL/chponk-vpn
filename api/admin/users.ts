@@ -4,6 +4,7 @@ import { db } from "../../src/db/index.js";
 import { users, subscriptions, plans, type User, type NewSubscription } from "../../src/db/schema.js";
 import {
   requireAdmin,
+  requireCsrf,
   methodNotAllowed,
   parsePagination,
   paginatedResponse,
@@ -15,6 +16,9 @@ export default async function handler(
 ) {
   const admin = requireAdmin(req, res);
   if (!admin) return;
+
+  // Validate CSRF for mutation methods
+  if (!requireCsrf(req, res)) return;
 
   // Route based on method
   switch (req.method) {

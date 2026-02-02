@@ -14,9 +14,11 @@ interface ApiResponse<T> {
 
 class ApiClient {
   private token: string | null = null;
+  private csrfToken: string | null = null;
 
   constructor() {
     this.token = localStorage.getItem("admin_token");
+    this.csrfToken = localStorage.getItem("admin_csrf_token");
   }
 
   setToken(token: string | null) {
@@ -25,6 +27,15 @@ class ApiClient {
       localStorage.setItem("admin_token", token);
     } else {
       localStorage.removeItem("admin_token");
+    }
+  }
+
+  setCsrfToken(csrfToken: string | null) {
+    this.csrfToken = csrfToken;
+    if (csrfToken) {
+      localStorage.setItem("admin_csrf_token", csrfToken);
+    } else {
+      localStorage.removeItem("admin_csrf_token");
     }
   }
 
@@ -49,9 +60,16 @@ class ApiClient {
       (headers as Record<string, string>)["Authorization"] = `Bearer ${this.token}`;
     }
 
+    // Include CSRF token for mutation methods
+    const method = options.method?.toUpperCase() || "GET";
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && this.csrfToken) {
+      (headers as Record<string, string>)["X-CSRF-Token"] = this.csrfToken;
+    }
+
     const response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
+      credentials: "same-origin", // Include cookies for CSRF validation
     });
 
     const data = await response.json();
@@ -71,6 +89,7 @@ class ApiClient {
   async login(telegramData: Record<string, string>) {
     const response = await this.request<{
       token: string;
+      csrfToken: string;
       user: { id: number; telegramId: string; username: string; firstName: string };
     }>("/auth", {
       method: "POST",
@@ -79,6 +98,9 @@ class ApiClient {
 
     if (response.success && response.data?.token) {
       this.setToken(response.data.token);
+      if (response.data.csrfToken) {
+        this.setCsrfToken(response.data.csrfToken);
+      }
     }
 
     return response;
@@ -86,6 +108,7 @@ class ApiClient {
 
   logout() {
     this.setToken(null);
+    this.setCsrfToken(null);
     window.location.href = "/login";
   }
 

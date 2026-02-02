@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { verifyJWT } from "../../src/lib/jwt.js";
+import { verifyJWT, validateCsrfToken } from "../../src/lib/jwt.js";
+import { parse as parseCookies } from "cookie";
 
 export interface AdminUser {
   id: number;
@@ -45,6 +46,35 @@ export function requireAdmin(
 export function methodNotAllowed(res: VercelResponse, allowed: string[]): void {
   res.setHeader("Allow", allowed.join(", "));
   res.status(405).json({ success: false, error: "Method not allowed" });
+}
+
+const MUTATION_METHODS = ["POST", "PUT", "PATCH", "DELETE"];
+
+export function getCsrfTokenFromCookie(req: VercelRequest): string | undefined {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return undefined;
+  const cookies = parseCookies(cookieHeader);
+  return cookies["csrf_token"];
+}
+
+export function requireCsrf(
+  req: VercelRequest,
+  res: VercelResponse
+): boolean {
+  // Only validate CSRF for mutation methods
+  if (!MUTATION_METHODS.includes(req.method || "")) {
+    return true;
+  }
+
+  const headerToken = req.headers["x-csrf-token"] as string | undefined;
+  const cookieToken = getCsrfTokenFromCookie(req);
+
+  if (!validateCsrfToken(headerToken, cookieToken)) {
+    res.status(403).json({ success: false, error: "Invalid CSRF token" });
+    return false;
+  }
+
+  return true;
 }
 
 export interface PaginationParams {

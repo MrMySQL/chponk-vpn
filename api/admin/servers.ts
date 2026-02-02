@@ -6,6 +6,7 @@ import { encrypt } from "../../src/lib/crypto.js";
 import { getXuiClientForServer } from "../../src/services/xui/repository.js";
 import {
   requireAdmin,
+  requireCsrf,
   methodNotAllowed,
   parsePagination,
   paginatedResponse,
@@ -17,6 +18,9 @@ export default async function handler(
 ) {
   const admin = requireAdmin(req, res);
   if (!admin) return;
+
+  // Validate CSRF for mutation methods
+  if (!requireCsrf(req, res)) return;
 
   switch (req.method) {
     case "GET":

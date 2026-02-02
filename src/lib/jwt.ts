@@ -1,5 +1,22 @@
 import * as crypto from "crypto";
 
+export function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+export function validateCsrfToken(headerToken: string | undefined, cookieToken: string | undefined): boolean {
+  if (!headerToken || !cookieToken) {
+    return false;
+  }
+  if (headerToken.length !== cookieToken.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(
+    Buffer.from(headerToken),
+    Buffer.from(cookieToken)
+  );
+}
+
 interface JWTPayload {
   sub: number;
   telegramId: string;
