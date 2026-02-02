@@ -65,18 +65,19 @@ export async function syncTrafficFromAllServers(): Promise<TrafficSyncResult> {
     connectionsByServer.set(conn.server.id, existing);
   }
 
-  // Process each server
+  // Process each server with a single API call
   for (const [serverId, serverConnections] of connectionsByServer) {
     try {
       const xuiClient = await getXuiClientForServer(serverId);
       result.serversProcessed++;
 
-      // Fetch traffic for each connection on this server
+      // Fetch all client traffic in one API call
+      const trafficMap = await xuiClient.getAllClientTraffic();
+
+      // Update each connection using the cached traffic data
       for (const { connection, subscription } of serverConnections) {
         try {
-          const traffic = await xuiClient.getClientTraffic(
-            subscription.clientUuid
-          );
+          const traffic = trafficMap.get(subscription.clientUuid);
 
           if (traffic) {
             const trafficUp = BigInt(traffic.up);
@@ -148,38 +149,56 @@ export async function syncUserTraffic(
       )
     );
 
-  const processedServers = new Set<number>();
+  // Group connections by server to minimize API calls
+  const connectionsByServer = new Map<
+    number,
+    { connection: typeof connections[0]["connection"]; subscription: typeof connections[0]["subscription"] }[]
+  >();
+  for (const conn of connections) {
+    const existing = connectionsByServer.get(conn.server.id) || [];
+    existing.push({ connection: conn.connection, subscription: conn.subscription });
+    connectionsByServer.set(conn.server.id, existing);
+  }
 
-  for (const { connection, subscription, server } of connections) {
+  // Process each server with a single API call
+  for (const [serverId, serverConnections] of connectionsByServer) {
     try {
-      const xuiClient = await getXuiClientForServer(server.id);
+      const xuiClient = await getXuiClientForServer(serverId);
+      result.serversProcessed++;
 
-      if (!processedServers.has(server.id)) {
-        processedServers.add(server.id);
-        result.serversProcessed++;
-      }
+      // Fetch all client traffic in one API call
+      const trafficMap = await xuiClient.getAllClientTraffic();
 
-      const traffic = await xuiClient.getClientTraffic(subscription.clientUuid);
+      // Update each connection using the cached traffic data
+      for (const { connection, subscription } of serverConnections) {
+        try {
+          const traffic = trafficMap.get(subscription.clientUuid);
 
-      if (traffic) {
-        const trafficUp = BigInt(traffic.up);
-        const trafficDown = BigInt(traffic.down);
+          if (traffic) {
+            const trafficUp = BigInt(traffic.up);
+            const trafficDown = BigInt(traffic.down);
 
-        await db
-          .update(userConnections)
-          .set({
-            trafficUp,
-            trafficDown,
-            lastSyncedAt: new Date(),
-          })
-          .where(eq(userConnections.id, connection.id));
+            await db
+              .update(userConnections)
+              .set({
+                trafficUp,
+                trafficDown,
+                lastSyncedAt: new Date(),
+              })
+              .where(eq(userConnections.id, connection.id));
 
-        result.connectionsUpdated++;
-        result.totalBytesUp += trafficUp;
-        result.totalBytesDown += trafficDown;
+            result.connectionsUpdated++;
+            result.totalBytesUp += trafficUp;
+            result.totalBytesDown += trafficDown;
+          }
+        } catch (error) {
+          const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
+          console.error(errMsg);
+          result.errors.push(errMsg);
+        }
       }
     } catch (error) {
-      const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
+      const errMsg = `Failed to connect to server ${serverId}: ${error instanceof Error ? error.message : String(error)}`;
       console.error(errMsg);
       result.errors.push(errMsg);
     }

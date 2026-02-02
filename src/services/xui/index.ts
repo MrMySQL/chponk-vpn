@@ -183,6 +183,44 @@ export class XuiClient {
     );
   }
 
+  /**
+   * Get traffic for all clients in the inbound in a single API call.
+   * Returns a map of UUID -> ClientTraffic.
+   *
+   * Note: Uses /list endpoint instead of /get/:id because only /list
+   * includes clientStats (the Go backend uses Preload for /list but not /get).
+   */
+  async getAllClientTraffic(): Promise<Map<string, ClientTraffic>> {
+    // Use /list endpoint which includes clientStats (unlike /get/:id)
+    const inbounds = await this.http.get<Inbound[]>(`/panel/api/inbounds/list`);
+    const inbound = inbounds?.find((i) => i.id === this.inboundId);
+
+    if (!inbound) {
+      throw new XuiNotFoundError("Inbound", String(this.inboundId));
+    }
+
+    const clients = this.parseClients(inbound);
+
+    // Build email -> traffic lookup from clientStats
+    const trafficByEmail = new Map<string, ClientTraffic>();
+    if (inbound.clientStats) {
+      for (const stat of inbound.clientStats) {
+        trafficByEmail.set(stat.email, stat);
+      }
+    }
+
+    // Map UUID -> traffic using clients list (which has both id and email)
+    const trafficByUuid = new Map<string, ClientTraffic>();
+    for (const client of clients) {
+      const traffic = trafficByEmail.get(client.email);
+      if (traffic) {
+        trafficByUuid.set(client.id, traffic);
+      }
+    }
+
+    return trafficByUuid;
+  }
+
   // ==================== Inbound ====================
 
   /**
