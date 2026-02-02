@@ -1,13 +1,16 @@
 {
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60
+  "installCommand": "npm install && npm run db:migrate && npm run admin:build",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/((?!api|assets).*)",
+      "destination": "/index.html"
     }
-  },
+  ],
   "crons": [
     {
       "path": "/api/cron/cleanup-expired",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
