@@ -155,11 +155,12 @@ export class XuiClient {
     }
 
     try {
-      const traffic = await this.http.get<ClientTraffic | null>(
+      // API returns an array of traffic records (one per inbound the client exists in)
+      const trafficList = await this.http.get<ClientTraffic[]>(
         `/panel/api/inbounds/getClientTrafficsById/${uuid}`
       );
-      console.log(`[XUI] getClientTraffic(${uuid}):`, JSON.stringify(traffic));
-      return traffic;
+      // Find the record for this client's inbound
+      return trafficList?.find((t) => t.inboundId === this.inboundId) ?? null;
     } catch (error) {
       // 3x-ui returns error if no traffic exists
       if (error instanceof XuiApiError) {
