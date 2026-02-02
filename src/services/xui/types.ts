@@ -15,7 +15,7 @@ export interface XuiClient {
   email: string;
   flow: string; // e.g., "xtls-rprx-vision"
   limitIp: number; // 0 = unlimited
-  totalGB: number; // 0 = unlimited
+  totalGB: number; // Traffic limit in BYTES (misleading name), 0 = unlimited
   expiryTime: number; // Unix timestamp in ms, 0 = never
   enable: boolean;
   tgId: string;

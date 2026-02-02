@@ -57,12 +57,16 @@ export class XuiClient {
 
     const uuid = options.uuid || randomUUID();
 
-    const client: XuiClientType = {
+    const totalGB = options.totalGB ?? 0;
+    // Convert GB to bytes - totalGB field in 3x-ui is actually in bytes despite the name
+    const totalBytes = totalGB > 0 ? totalGB * 1024 * 1024 * 1024 : 0;
+
+    const client: Record<string, unknown> = {
       id: uuid,
       email: options.email,
       flow: options.flow || "xtls-rprx-vision",
       limitIp: options.limitIp ?? 0,
-      totalGB: options.totalGB ?? 0,
+      totalGB: totalBytes,
       expiryTime: options.expiryTime ?? 0,
       enable: options.enable ?? true,
       tgId: options.tgId || "",
@@ -110,13 +114,16 @@ export class XuiClient {
       throw new XuiNotFoundError("Client", uuid);
     }
 
-    // Merge updates
-    const updated: XuiClientType = {
+    // Merge updates - convert GB to bytes for totalGB field
+    const totalGB = updates.totalGB ?? existing.totalGB ?? 0;
+    const totalBytes = totalGB > 0 ? totalGB * 1024 * 1024 * 1024 : 0;
+
+    const updated: Record<string, unknown> = {
       ...existing,
       email: updates.email ?? existing.email,
       flow: updates.flow ?? existing.flow,
       limitIp: updates.limitIp ?? existing.limitIp,
-      totalGB: updates.totalGB ?? existing.totalGB,
+      totalGB: totalBytes,
       expiryTime: updates.expiryTime ?? existing.expiryTime,
       enable: updates.enable ?? existing.enable,
       tgId: updates.tgId ?? existing.tgId,

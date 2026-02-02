@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq, sql, desc } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
-import { servers, userConnections, type NewServer, type Server } from "../../src/db/schema.js";
+import { servers, userConnections, subscriptions, users, type NewServer, type Server } from "../../src/db/schema.js";
 import { encrypt } from "../../src/lib/crypto.js";
+import { getXuiClientForServer } from "../../src/services/xui/repository.js";
 import {
   requireAdmin,
   methodNotAllowed,
@@ -32,7 +33,12 @@ export default async function handler(
 }
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
-  const { id } = req.query;
+  const { id, connections } = req.query;
+
+  // List connections for a server
+  if (connections === "true" && id && typeof id === "string") {
+    return listServerConnections(res, parseInt(id, 10));
+  }
 
   if (id && typeof id === "string") {
     return getServerById(res, parseInt(id, 10));
@@ -112,6 +118,61 @@ async function listServers(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error("Failed to list servers:", error);
     return res.status(500).json({ success: false, error: "Failed to list servers" });
+  }
+}
+
+async function listServerConnections(res: VercelResponse, serverId: number) {
+  if (isNaN(serverId)) {
+    return res.status(400).json({ success: false, error: "Invalid serverId" });
+  }
+
+  try {
+    const connectionsList = await db
+      .select({
+        id: userConnections.id,
+        xuiClientEmail: userConnections.xuiClientEmail,
+        trafficUp: userConnections.trafficUp,
+        trafficDown: userConnections.trafficDown,
+        lastSyncedAt: userConnections.lastSyncedAt,
+        createdAt: userConnections.createdAt,
+        subscriptionId: subscriptions.id,
+        subscriptionStatus: subscriptions.status,
+        subscriptionExpiresAt: subscriptions.expiresAt,
+        userId: users.id,
+        userTelegramId: users.telegramId,
+        userUsername: users.username,
+        userFirstName: users.firstName,
+      })
+      .from(userConnections)
+      .innerJoin(subscriptions, eq(userConnections.subscriptionId, subscriptions.id))
+      .innerJoin(users, eq(subscriptions.userId, users.id))
+      .where(eq(userConnections.serverId, serverId))
+      .orderBy(desc(userConnections.createdAt));
+
+    const data = connectionsList.map((c) => ({
+      id: c.id,
+      xuiClientEmail: c.xuiClientEmail,
+      trafficUp: c.trafficUp.toString(),
+      trafficDown: c.trafficDown.toString(),
+      lastSyncedAt: c.lastSyncedAt,
+      createdAt: c.createdAt,
+      subscription: {
+        id: c.subscriptionId,
+        status: c.subscriptionStatus,
+        expiresAt: c.subscriptionExpiresAt,
+      },
+      user: {
+        id: c.userId,
+        telegramId: c.userTelegramId.toString(),
+        username: c.userUsername,
+        firstName: c.userFirstName,
+      },
+    }));
+
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Failed to list connections:", error);
+    return res.status(500).json({ success: false, error: "Failed to list connections" });
   }
 }
 
@@ -270,7 +331,12 @@ async function handlePatch(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleDelete(req: VercelRequest, res: VercelResponse) {
-  const { id } = req.query;
+  const { id, connectionId } = req.query;
+
+  // Delete a connection
+  if (connectionId && typeof connectionId === "string") {
+    return deleteConnection(res, parseInt(connectionId, 10));
+  }
 
   if (!id || typeof id !== "string") {
     return res.status(400).json({ success: false, error: "Server ID required" });
@@ -311,5 +377,59 @@ async function handleDelete(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error("Failed to delete server:", error);
     return res.status(500).json({ success: false, error: "Failed to delete server" });
+  }
+}
+
+async function deleteConnection(res: VercelResponse, connectionId: number) {
+  if (isNaN(connectionId)) {
+    return res.status(400).json({ success: false, error: "Invalid connection ID" });
+  }
+
+  try {
+    // Get connection details with subscription UUID
+    const connection = await db
+      .select({
+        id: userConnections.id,
+        serverId: userConnections.serverId,
+        clientUuid: subscriptions.clientUuid,
+      })
+      .from(userConnections)
+      .innerJoin(subscriptions, eq(userConnections.subscriptionId, subscriptions.id))
+      .where(eq(userConnections.id, connectionId))
+      .limit(1);
+
+    if (connection.length === 0) {
+      return res.status(404).json({ success: false, error: "Connection not found" });
+    }
+
+    const { serverId, clientUuid } = connection[0];
+
+    // Delete from X-UI panel
+    try {
+      const xuiClient = await getXuiClientForServer(serverId);
+      await xuiClient.deleteClient(clientUuid);
+    } catch (xuiError) {
+      console.error("Failed to delete client from X-UI:", xuiError);
+      // Continue with database deletion even if X-UI fails
+      // The client might already be deleted or server might be unreachable
+    }
+
+    // Delete from database
+    const [deleted] = await db
+      .delete(userConnections)
+      .where(eq(userConnections.id, connectionId))
+      .returning({ id: userConnections.id });
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: "Connection not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Connection deleted",
+    });
+  } catch (error) {
+    console.error("Failed to delete connection:", error);
+    return res.status(500).json({ success: false, error: "Failed to delete connection" });
   }
 }

@@ -162,7 +162,27 @@ class ApiClient {
   }
 
   async getServer(id: number) {
-    return this.request(`/servers?id=${id}`);
+    return this.request<{
+      id: number;
+      name: string;
+      location: string;
+      flagEmoji: string | null;
+      host: string;
+      domain: string;
+      xuiPort: number;
+      xuiBasePath: string | null;
+      xuiUsername: string;
+      inboundId: number;
+      realityPort: number;
+      realityDest: string;
+      realitySni: string;
+      realityPublicKey: string | null;
+      realityShortId: string | null;
+      isActive: boolean;
+      activeConnections: number;
+      createdAt: string;
+      updatedAt: string;
+    }>(`/servers?id=${id}`);
   }
 
   async createServer(data: Record<string, unknown>) {
@@ -288,6 +308,35 @@ class ApiClient {
     return this.request(`/subscriptions?id=${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    });
+  }
+
+  // Connections
+  async getServerConnections(serverId: number) {
+    return this.request<Array<{
+      id: number;
+      xuiClientEmail: string;
+      trafficUp: string;
+      trafficDown: string;
+      lastSyncedAt: string | null;
+      createdAt: string;
+      subscription: {
+        id: number;
+        status: string;
+        expiresAt: string;
+      };
+      user: {
+        id: number;
+        telegramId: string;
+        username: string | null;
+        firstName: string | null;
+      };
+    }>>(`/servers?id=${serverId}&connections=true`);
+  }
+
+  async deleteConnection(connectionId: number) {
+    return this.request(`/servers?connectionId=${connectionId}`, {
+      method: "DELETE",
     });
   }
 }
