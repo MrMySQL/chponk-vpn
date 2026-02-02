@@ -8,6 +8,7 @@ export const serverRegistrationSchema = z.object({
   domain: z.string().min(1).max(255),
 
   xuiPort: z.number().int().min(1).max(65535).default(2053),
+  xuiBasePath: z.string().max(255).optional(),
   xuiUsername: z.string().min(1).max(100),
   xuiPassword: z.string().min(1),
 

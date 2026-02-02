@@ -52,7 +52,7 @@ export async function getXuiClientForServer(
  */
 export function createClientFromServer(server: Server): XuiClient {
   const config: XuiServerConfig = {
-    host: server.host,
+    host: server.domain,
     port: server.xuiPort,
     username: server.xuiUsername,
     password: decrypt(server.xuiPassword),
