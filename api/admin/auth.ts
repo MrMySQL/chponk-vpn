@@ -92,7 +92,7 @@ export default async function handler(
     // Generate JWT token
     const token = signJWT({
       sub: user.id,
-      telegramId: authData.id,
+      telegramId: String(authData.id),
       isAdmin: true,
     });
 

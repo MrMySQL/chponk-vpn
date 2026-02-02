@@ -54,7 +54,12 @@ export function signJWT(payload: Omit<JWTPayload, "iat" | "exp">): string {
 }
 
 export function verifyJWT(token: string): JWTPayload | null {
-  const secret = getSecret();
+  let secret: string;
+  try {
+    secret = getSecret();
+  } catch {
+    return null;
+  }
 
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -73,6 +78,10 @@ export function verifyJWT(token: string): JWTPayload | null {
     encodedSignature.replace(/-/g, "+").replace(/_/g, "/"),
     "base64"
   );
+
+  if (expectedSignature.length !== actualSignature.length) {
+    return null;
+  }
 
   if (!crypto.timingSafeEqual(expectedSignature, actualSignature)) {
     return null;
