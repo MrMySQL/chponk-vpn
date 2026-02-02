@@ -505,8 +505,8 @@ Choose popular sites that won't be blocked:
 
 ### Phase 3: Admin & Polish
 - [ ] Admin bot commands (/stats, /broadcast, /addserver, /ban, /gift)
-- [ ] Web admin dashboard
-- [ ] Usage statistics and analytics
+- [x] Web admin dashboard (React + Vite, Telegram Login Widget auth)
+- [x] Usage statistics and analytics (dashboard with user/subscription/revenue stats)
 - [ ] Traffic tracking per user (aggregate from all servers)
 
 ### Phase 4: Production Hardening
