@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "free_trial_claimed_at" timestamp;

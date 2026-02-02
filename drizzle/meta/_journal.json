@@ -36,6 +36,13 @@
       "when": 1769995871470,
       "tag": "0004_complex_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770045413574,
+      "tag": "0005_lush_mariko_yashida",
+      "breakpoints": true
     }
   ]
 }
