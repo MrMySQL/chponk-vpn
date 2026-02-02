@@ -17,6 +17,7 @@ import {
   handleServerConnect,
   handleGetConnection,
 } from "./callbacks/server-connect.js";
+import { handleRefreshTraffic } from "./callbacks/account.js";
 
 interface BotOptions {
   useTestEnv?: boolean;
@@ -56,6 +57,9 @@ export function createBot(
 
   // Handle server connection callbacks (connect_{serverId})
   bot.callbackQuery(/^connect_(\d+)$/, handleServerConnect);
+
+  // Handle traffic refresh callbacks (refresh_traffic_{subscriptionId})
+  bot.callbackQuery(/^refresh_traffic_(\d+)$/, handleRefreshTraffic);
 
   // Support handler
   bot.callbackQuery("show_support", async (ctx) => {

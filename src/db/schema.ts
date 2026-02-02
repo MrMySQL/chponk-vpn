@@ -121,6 +121,13 @@ export const userConnections = pgTable(
       .notNull()
       .references(() => servers.id),
     xuiClientEmail: text("xui_client_email").notNull(), // Email/identifier in 3x-ui
+    trafficUp: bigint("traffic_up", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
+    trafficDown: bigint("traffic_down", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
+    lastSyncedAt: timestamp("last_synced_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/cleanup-expired",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/sync-traffic",
+      "schedule": "0 12 * * *"
     }
   ]
 }

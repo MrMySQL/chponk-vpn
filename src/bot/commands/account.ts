@@ -3,6 +3,11 @@ import { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
 import { subscriptions, plans } from "../../db/schema.js";
 import { eq, and, gt } from "drizzle-orm";
+import {
+  getAggregatedTraffic,
+  formatBytes,
+  formatTimeAgo,
+} from "../../services/traffic-sync.js";
 
 export async function accountCommand(ctx: AuthContext): Promise<void> {
   // Get active subscriptions
@@ -48,16 +53,42 @@ export async function accountCommand(ctx: AuthContext): Promise<void> {
         (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
 
-      const trafficUsedGb = Number(subscription.trafficUsedBytes) / 1e9;
+      // Get aggregated traffic from all servers
+      const traffic = await getAggregatedTraffic(subscription.id);
+      const totalTrafficGb = Number(traffic.total) / 1e9;
       const trafficLimit =
         plan.trafficLimitGb === null ? "∞" : `${plan.trafficLimitGb}`;
+
+      // Calculate percentage if there's a limit
+      let percentageStr = "";
+      if (plan.trafficLimitGb !== null && plan.trafficLimitGb > 0) {
+        const percentage = Math.min(
+          100,
+          (totalTrafficGb / plan.trafficLimitGb) * 100
+        );
+        percentageStr = ` (${percentage.toFixed(0)}%)`;
+      }
 
       message +=
         `*${plan.name}*\n` +
         `├ Status: ✅ Active\n` +
         `├ Expires: ${expiresAt.toLocaleDateString()} (${daysLeft} days)\n` +
-        `├ Traffic: ${trafficUsedGb.toFixed(2)} / ${trafficLimit} GB\n` +
-        `└ Devices: ${plan.maxDevices}\n\n`;
+        `├ Devices: ${plan.maxDevices}\n` +
+        `│\n` +
+        `├ 📊 *Traffic Usage:*\n` +
+        `│  ↑ Upload: ${formatBytes(traffic.totalUp)}\n` +
+        `│  ↓ Download: ${formatBytes(traffic.totalDown)}\n` +
+        `│  📦 Total: ${totalTrafficGb.toFixed(2)} / ${trafficLimit} GB${percentageStr}\n` +
+        `└  🔄 Updated ${formatTimeAgo(traffic.lastSyncedAt)}\n\n`;
+    }
+
+    // Add refresh button for each subscription
+    if (activeSubscriptions.length > 0) {
+      keyboard.text(
+        "🔄 Refresh Traffic",
+        `refresh_traffic_${activeSubscriptions[0].subscription.id}`
+      );
+      keyboard.row();
     }
 
     keyboard
