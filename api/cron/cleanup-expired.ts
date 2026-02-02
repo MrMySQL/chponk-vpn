@@ -11,17 +11,19 @@ export default async function handler(
     return;
   }
 
-  // Verify cron secret for manual testing (Vercel crons are protected by default)
+  // Verify cron secret - required for both Vercel cron and manual requests
+  // Vercel cron automatically sends Authorization header when CRON_SECRET is set
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 
-  // If CRON_SECRET is set, require it for non-Vercel requests
-  // Vercel cron requests don't include custom auth headers
-  if (cronSecret && authHeader) {
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+  if (!cronSecret) {
+    res.status(500).json({ error: "CRON_SECRET not configured" });
+    return;
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
 
   try {
