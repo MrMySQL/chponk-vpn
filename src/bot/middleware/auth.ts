@@ -12,6 +12,7 @@ export interface AuthContext extends Context {
     languageCode: string;
     isAdmin: boolean;
     isBanned: boolean;
+    freeTrialClaimedAt: Date | null;
   };
 }
 
@@ -76,6 +77,7 @@ export async function authMiddleware(
     languageCode: user.languageCode,
     isAdmin: user.isAdmin,
     isBanned: user.isBanned,
+    freeTrialClaimedAt: user.freeTrialClaimedAt,
   };
 
   await next();

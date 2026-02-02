@@ -47,6 +47,7 @@ export const users = pgTable("users", {
   languageCode: text("language_code").notNull().default("en"),
   isAdmin: boolean("is_admin").notNull().default(false),
   isBanned: boolean("is_banned").notNull().default(false),
+  freeTrialClaimedAt: timestamp("free_trial_claimed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
