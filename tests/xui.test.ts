@@ -482,7 +482,7 @@ describe("XuiClient", () => {
 
       expect(addedClient.flow).toBe("custom-flow");
       expect(addedClient.limitIp).toBe(3);
-      expect(addedClient.totalGB).toBe(100);
+      expect(addedClient.totalGB).toBe(100 * 1024 * 1024 * 1024); // 100 GB in bytes
       expect(addedClient.expiryTime).toBe(1700000000000);
       expect(addedClient.enable).toBe(false);
       expect(addedClient.tgId).toBe("123456789");
@@ -629,7 +629,7 @@ describe("XuiClient", () => {
       };
 
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ success: true, msg: "", obj: traffic })
+        createMockResponse({ success: true, msg: "", obj: [traffic] })
       );
 
       const result = await client.getClientTraffic("uuid-123");
