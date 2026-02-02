@@ -499,22 +499,26 @@ Choose popular sites that won't be blocked:
 - [x] `/servers` command - list all available servers
 - [x] `/connect` command - server selection + config generation
 - [x] On-demand 3x-ui client creation (when user picks server)
+- [x] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
+- [x] 7-day free trial for new users (auto-activated on /start)
+- [x] Subscription upgrade flow (preserves existing VPN connections)
 - [ ] QR code generation for configs
 - [ ] TON payment integration
-- [x] Auto-expiry cron job (cleanup expired subscriptions + 3x-ui clients)
 
 ### Phase 3: Admin & Polish
-- [ ] Admin bot commands (/stats, /broadcast, /addserver, /ban, /gift)
 - [x] Web admin dashboard (React + Vite, Telegram Login Widget auth)
 - [x] Usage statistics and analytics (dashboard with user/subscription/revenue stats)
-- [ ] Traffic tracking per user (aggregate from all servers)
+- [x] Traffic tracking per user (aggregate from all servers via sync-traffic cron)
+- [x] Admin API for user management (ban/unban, gift days, promote to admin)
+- [ ] Admin bot commands (/stats, /broadcast, /addserver, /ban, /gift) - *optional, web dashboard covers this*
 
 ### Phase 4: Production Hardening
+- [x] Basic rate limiting (traffic refresh button - 60s cooldown)
+- [x] Console logging throughout critical paths
 - [ ] Error monitoring (Sentry)
-- [ ] Logging and alerting
+- [ ] Comprehensive alerting system
 - [ ] Backup strategy
 - [ ] Load testing
-- [ ] Rate limiting
 
 ---
 
