@@ -896,21 +896,19 @@ describe("Repository", () => {
 
     it("throws XuiNotFoundError when server not found", async () => {
       const { db } = await import("@/db");
-      const mockedDb = vi.mocked(db);
       const {
         getXuiClientForServer,
         clearXuiClientCache,
       } = await import("../src/services/xui/repository");
 
       clearXuiClientCache();
-      mockedDb.query.servers.findFirst.mockResolvedValueOnce(undefined);
+      (db.query.servers.findFirst as Mock).mockResolvedValueOnce(undefined);
 
       await expect(getXuiClientForServer(999)).rejects.toThrow(XuiNotFoundError);
     });
 
     it("throws error when server is not active", async () => {
       const { db } = await import("@/db");
-      const mockedDb = vi.mocked(db);
       const {
         getXuiClientForServer,
         clearXuiClientCache,
@@ -939,7 +937,7 @@ describe("Repository", () => {
         updatedAt: new Date(),
       };
 
-      mockedDb.query.servers.findFirst.mockResolvedValueOnce(mockServer);
+      (db.query.servers.findFirst as Mock).mockResolvedValueOnce(mockServer);
 
       await expect(getXuiClientForServer(1)).rejects.toThrow("not active");
     });
