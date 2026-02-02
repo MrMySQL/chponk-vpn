@@ -158,6 +158,7 @@ export class XuiClient {
       const traffic = await this.http.get<ClientTraffic | null>(
         `/panel/api/inbounds/getClientTrafficsById/${uuid}`
       );
+      console.log(`[XUI] getClientTraffic(${uuid}):`, JSON.stringify(traffic));
       return traffic;
     } catch (error) {
       // 3x-ui returns error if no traffic exists
