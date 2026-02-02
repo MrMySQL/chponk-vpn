@@ -92,7 +92,7 @@ async function listServers(req: VercelRequest, res: VercelResponse) {
       .select({ count: sql<number>`count(*)::int` })
       .from(servers);
 
-    // Get servers with connection counts
+    // Get servers with connection counts using LEFT JOIN
     const serverList = await db
       .select({
         id: servers.id,
@@ -104,12 +104,11 @@ async function listServers(req: VercelRequest, res: VercelResponse) {
         isActive: servers.isActive,
         createdAt: servers.createdAt,
         updatedAt: servers.updatedAt,
-        connectionCount: sql<number>`(
-          select count(*)::int from user_connections
-          where user_connections.server_id = ${servers.id}
-        )`,
+        connectionCount: sql<number>`count(${userConnections.id})::int`,
       })
       .from(servers)
+      .leftJoin(userConnections, eq(servers.id, userConnections.serverId))
+      .groupBy(servers.id)
       .orderBy(desc(servers.createdAt))
       .limit(pagination.limit)
       .offset(pagination.offset);
