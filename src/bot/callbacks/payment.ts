@@ -2,12 +2,13 @@
  * Telegram Stars payment handlers
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type { Context } from "grammy";
 import type { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
 import { plans, subscriptions, payments } from "../../db/schema.js";
+import { upgradeSubscription } from "../../services/subscription-upgrade.js";
 
 /**
  * Handle plan purchase button click - send invoice
@@ -96,9 +97,10 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
 }
 
 /**
- * Handle successful payment - activate subscription
- * Note: 3x-ui client is NOT created here. It's created on-demand when user
- * selects a server via /servers or /connect command.
+ * Handle successful payment - activate subscription or upgrade existing one
+ * Note: 3x-ui client is NOT created here for new subscriptions.
+ * It's created on-demand when user selects a server via /servers or /connect command.
+ * For upgrades, existing 3x-ui clients are updated with new limits.
  */
 export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
   const payment = ctx.message?.successful_payment;
@@ -137,50 +139,89 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
       return;
     }
 
-    // Generate client UUID (shared across all servers)
-    const clientUuid = randomUUID();
-
-    // Calculate expiry
-    const startsAt = new Date();
-    const expiresAt = new Date(startsAt);
-    expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
-
-    // Create subscription in database
-    const [subscription] = await db
-      .insert(subscriptions)
-      .values({
-        userId,
-        planId: plan.id,
-        clientUuid,
-        status: "active",
-        startsAt,
-        expiresAt,
-      })
-      .returning();
-
-    // Record payment
-    await db.insert(payments).values({
-      userId,
-      subscriptionId: subscription.id,
-      amount: String(payment.total_amount),
-      currency: "stars",
-      status: "completed",
-      providerId: payment.telegram_payment_charge_id,
+    // Check for existing active subscription to determine upgrade vs new purchase
+    const existingSubscription = await db.query.subscriptions.findFirst({
+      where: and(
+        eq(subscriptions.userId, userId),
+        eq(subscriptions.status, "active"),
+        gt(subscriptions.expiresAt, new Date())
+      ),
+      with: { plan: true },
     });
 
-    // Send success message
-    const traffic =
-      plan.trafficLimitGb === null ? "Unlimited" : `${plan.trafficLimitGb} GB`;
+    if (existingSubscription) {
+      // UPGRADE PATH - reuse clientUuid, update limits on servers
+      const result = await upgradeSubscription(
+        userId,
+        payload.planId,
+        chargeId,
+        String(payment.total_amount)
+      );
 
-    await ctx.reply(
-      `✅ *Payment Successful!*\n\n` +
-        `Your *${plan.name}* subscription is now active.\n\n` +
-        `📅 Valid until: ${expiresAt.toLocaleDateString()}\n` +
+      const traffic =
+        plan.trafficLimitGb === null ? "Unlimited" : `${plan.trafficLimitGb} GB`;
+
+      let upgradeMessage =
+        `✅ *Subscription Upgraded!*\n\n` +
+        `You've upgraded from *${existingSubscription.plan.name}* to *${plan.name}*.\n\n` +
+        `📅 Valid until: ${result.newSubscription.expiresAt.toLocaleDateString()}\n` +
         `📊 Traffic: ${traffic}\n` +
-        `📱 Devices: ${plan.maxDevices}\n\n` +
-        `🌍 Use /servers to choose a server and get your connection link.`,
-      { parse_mode: "Markdown" }
-    );
+        `📱 Devices: ${plan.maxDevices}\n\n`;
+
+      if (result.transferredConnections > 0) {
+        upgradeMessage += `🔗 Your existing VPN connections have been preserved.\n`;
+        upgradeMessage += `✨ ${result.updatedServers} server(s) updated with new limits.\n\n`;
+      }
+
+      upgradeMessage += `🌍 Use /servers to connect or switch servers.`;
+
+      await ctx.reply(upgradeMessage, { parse_mode: "Markdown" });
+    } else {
+      // NEW PURCHASE PATH - create new subscription with new clientUuid
+      const clientUuid = randomUUID();
+
+      // Calculate expiry
+      const startsAt = new Date();
+      const expiresAt = new Date(startsAt);
+      expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
+
+      // Create subscription in database
+      const [subscription] = await db
+        .insert(subscriptions)
+        .values({
+          userId,
+          planId: plan.id,
+          clientUuid,
+          status: "active",
+          startsAt,
+          expiresAt,
+        })
+        .returning();
+
+      // Record payment
+      await db.insert(payments).values({
+        userId,
+        subscriptionId: subscription.id,
+        amount: String(payment.total_amount),
+        currency: "stars",
+        status: "completed",
+        providerId: payment.telegram_payment_charge_id,
+      });
+
+      // Send success message
+      const traffic =
+        plan.trafficLimitGb === null ? "Unlimited" : `${plan.trafficLimitGb} GB`;
+
+      await ctx.reply(
+        `✅ *Payment Successful!*\n\n` +
+          `Your *${plan.name}* subscription is now active.\n\n` +
+          `📅 Valid until: ${expiresAt.toLocaleDateString()}\n` +
+          `📊 Traffic: ${traffic}\n` +
+          `📱 Devices: ${plan.maxDevices}\n\n` +
+          `🌍 Use /servers to choose a server and get your connection link.`,
+        { parse_mode: "Markdown" }
+      );
+    }
   } catch (error) {
     console.error("Failed to process successful payment:", error);
     await ctx.reply(
