@@ -99,6 +99,11 @@ export default function Servers() {
     connections: ConnectionInfo[];
     loading: boolean;
   } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    connectionsUpdated: number;
+    serversProcessed: number;
+  } | null>(null);
 
   useEffect(() => {
     loadServers();
@@ -302,6 +307,26 @@ export default function Servers() {
     }
   }
 
+  async function handleSyncTraffic() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const response = await api.syncTraffic();
+      if (response.success && response.data) {
+        setSyncResult({
+          connectionsUpdated: response.data.connectionsUpdated,
+          serversProcessed: response.data.serversProcessed,
+        });
+        // Clear result after 5 seconds
+        setTimeout(() => setSyncResult(null), 5000);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to sync traffic");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const columns = [
     {
       key: "id",
@@ -395,12 +420,26 @@ export default function Servers() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Servers</h1>
-        <button
-          onClick={openCreateModal}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Add Server
-        </button>
+        <div className="flex items-center gap-3">
+          {syncResult && (
+            <span className="text-sm text-green-600">
+              Synced {syncResult.connectionsUpdated} connections from {syncResult.serversProcessed} servers
+            </span>
+          )}
+          <button
+            onClick={handleSyncTraffic}
+            disabled={syncing}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+          >
+            {syncing ? "Syncing..." : "Sync Traffic"}
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Add Server
+          </button>
+        </div>
       </div>
 
       <DataTable

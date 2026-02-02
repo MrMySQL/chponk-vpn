@@ -339,6 +339,18 @@ class ApiClient {
       method: "DELETE",
     });
   }
+
+  // Traffic Sync
+  async syncTraffic() {
+    return this.request<{
+      serversProcessed: number;
+      connectionsUpdated: number;
+      totalBytesUp: string;
+      totalBytesDown: string;
+    }>("/sync-traffic", {
+      method: "POST",
+    });
+  }
 }
 
 export const api = new ApiClient();
