@@ -65,46 +65,67 @@ export async function syncTrafficFromAllServers(): Promise<TrafficSyncResult> {
     connectionsByServer.set(conn.server.id, existing);
   }
 
-  // Process each server with a single API call
-  for (const [serverId, serverConnections] of connectionsByServer) {
-    try {
-      const xuiClient = await getXuiClientForServer(serverId);
-      result.serversProcessed++;
+  // Process all servers in parallel
+  const serverResults = await Promise.allSettled(
+    [...connectionsByServer.entries()].map(
+      async ([serverId, serverConnections]) => {
+        const partialResult = {
+          connectionsUpdated: 0,
+          totalBytesUp: BigInt(0),
+          totalBytesDown: BigInt(0),
+          errors: [] as string[],
+        };
 
-      // Fetch all client traffic in one API call
-      const trafficMap = await xuiClient.getAllClientTraffic();
+        const xuiClient = await getXuiClientForServer(serverId);
 
-      // Update each connection using the cached traffic data
-      for (const { connection, subscription } of serverConnections) {
-        try {
-          const traffic = trafficMap.get(subscription.clientUuid);
+        // Fetch all client traffic in one API call
+        const trafficMap = await xuiClient.getAllClientTraffic();
 
-          if (traffic) {
-            const trafficUp = BigInt(traffic.up);
-            const trafficDown = BigInt(traffic.down);
+        // Update each connection using the cached traffic data
+        for (const { connection, subscription } of serverConnections) {
+          try {
+            const traffic = trafficMap.get(subscription.clientUuid);
 
-            // Update connection with traffic data
-            await db
-              .update(userConnections)
-              .set({
-                trafficUp,
-                trafficDown,
-                lastSyncedAt: new Date(),
-              })
-              .where(eq(userConnections.id, connection.id));
+            if (traffic) {
+              const trafficUp = BigInt(traffic.up);
+              const trafficDown = BigInt(traffic.down);
 
-            result.connectionsUpdated++;
-            result.totalBytesUp += trafficUp;
-            result.totalBytesDown += trafficDown;
+              // Update connection with traffic data
+              await db
+                .update(userConnections)
+                .set({
+                  trafficUp,
+                  trafficDown,
+                  lastSyncedAt: new Date(),
+                })
+                .where(eq(userConnections.id, connection.id));
+
+              partialResult.connectionsUpdated++;
+              partialResult.totalBytesUp += trafficUp;
+              partialResult.totalBytesDown += trafficDown;
+            }
+          } catch (error) {
+            const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
+            console.error(errMsg);
+            partialResult.errors.push(errMsg);
           }
-        } catch (error) {
-          const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
-          console.error(errMsg);
-          result.errors.push(errMsg);
         }
+
+        return { serverId, ...partialResult };
       }
-    } catch (error) {
-      const errMsg = `Failed to connect to server ${serverId}: ${error instanceof Error ? error.message : String(error)}`;
+    )
+  );
+
+  // Aggregate results from all servers
+  for (const serverResult of serverResults) {
+    if (serverResult.status === "fulfilled") {
+      result.serversProcessed++;
+      result.connectionsUpdated += serverResult.value.connectionsUpdated;
+      result.totalBytesUp += serverResult.value.totalBytesUp;
+      result.totalBytesDown += serverResult.value.totalBytesDown;
+      result.errors.push(...serverResult.value.errors);
+    } else {
+      const errMsg = `Failed to connect to server: ${serverResult.reason instanceof Error ? serverResult.reason.message : String(serverResult.reason)}`;
       console.error(errMsg);
       result.errors.push(errMsg);
     }
@@ -160,45 +181,66 @@ export async function syncUserTraffic(
     connectionsByServer.set(conn.server.id, existing);
   }
 
-  // Process each server with a single API call
-  for (const [serverId, serverConnections] of connectionsByServer) {
-    try {
-      const xuiClient = await getXuiClientForServer(serverId);
-      result.serversProcessed++;
+  // Process all servers in parallel
+  const serverResults = await Promise.allSettled(
+    [...connectionsByServer.entries()].map(
+      async ([serverId, serverConnections]) => {
+        const partialResult = {
+          connectionsUpdated: 0,
+          totalBytesUp: BigInt(0),
+          totalBytesDown: BigInt(0),
+          errors: [] as string[],
+        };
 
-      // Fetch all client traffic in one API call
-      const trafficMap = await xuiClient.getAllClientTraffic();
+        const xuiClient = await getXuiClientForServer(serverId);
 
-      // Update each connection using the cached traffic data
-      for (const { connection, subscription } of serverConnections) {
-        try {
-          const traffic = trafficMap.get(subscription.clientUuid);
+        // Fetch all client traffic in one API call
+        const trafficMap = await xuiClient.getAllClientTraffic();
 
-          if (traffic) {
-            const trafficUp = BigInt(traffic.up);
-            const trafficDown = BigInt(traffic.down);
+        // Update each connection using the cached traffic data
+        for (const { connection, subscription } of serverConnections) {
+          try {
+            const traffic = trafficMap.get(subscription.clientUuid);
 
-            await db
-              .update(userConnections)
-              .set({
-                trafficUp,
-                trafficDown,
-                lastSyncedAt: new Date(),
-              })
-              .where(eq(userConnections.id, connection.id));
+            if (traffic) {
+              const trafficUp = BigInt(traffic.up);
+              const trafficDown = BigInt(traffic.down);
 
-            result.connectionsUpdated++;
-            result.totalBytesUp += trafficUp;
-            result.totalBytesDown += trafficDown;
+              await db
+                .update(userConnections)
+                .set({
+                  trafficUp,
+                  trafficDown,
+                  lastSyncedAt: new Date(),
+                })
+                .where(eq(userConnections.id, connection.id));
+
+              partialResult.connectionsUpdated++;
+              partialResult.totalBytesUp += trafficUp;
+              partialResult.totalBytesDown += trafficDown;
+            }
+          } catch (error) {
+            const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
+            console.error(errMsg);
+            partialResult.errors.push(errMsg);
           }
-        } catch (error) {
-          const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
-          console.error(errMsg);
-          result.errors.push(errMsg);
         }
+
+        return { serverId, ...partialResult };
       }
-    } catch (error) {
-      const errMsg = `Failed to connect to server ${serverId}: ${error instanceof Error ? error.message : String(error)}`;
+    )
+  );
+
+  // Aggregate results from all servers
+  for (const serverResult of serverResults) {
+    if (serverResult.status === "fulfilled") {
+      result.serversProcessed++;
+      result.connectionsUpdated += serverResult.value.connectionsUpdated;
+      result.totalBytesUp += serverResult.value.totalBytesUp;
+      result.totalBytesDown += serverResult.value.totalBytesDown;
+      result.errors.push(...serverResult.value.errors);
+    } else {
+      const errMsg = `Failed to connect to server: ${serverResult.reason instanceof Error ? serverResult.reason.message : String(serverResult.reason)}`;
       console.error(errMsg);
       result.errors.push(errMsg);
     }
