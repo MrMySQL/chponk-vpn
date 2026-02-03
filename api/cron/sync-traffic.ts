@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { syncTrafficFromAllServers } from "../../src/services/traffic-sync.js";
 import { verifyJWT } from "../../src/lib/jwt.js";
+import { createLogger } from "../../src/lib/logger.js";
+
+const log = createLogger({ handler: "cron/sync-traffic" });
 
 export default async function handler(
   req: VercelRequest,
@@ -24,26 +27,31 @@ export default async function handler(
     // Check if it's the cron secret
     if (cronSecret && token === cronSecret) {
       isAuthorized = true;
+      log.info("Traffic sync authorized via cron secret");
     } else {
       // Try to verify as admin JWT
       const payload = verifyJWT(token);
       if (payload?.isAdmin) {
         isAuthorized = true;
-        console.log(`Traffic sync triggered by admin ${payload.telegramId}`);
+        log.info("Traffic sync triggered by admin", {
+          adminId: payload.sub,
+          telegramId: payload.telegramId,
+        });
       }
     }
   }
 
   if (!isAuthorized) {
+    log.warn("Unauthorized traffic sync attempt");
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   try {
-    console.log("Starting traffic sync cron job");
+    log.info("Starting traffic sync cron job");
     const result = await syncTrafficFromAllServers();
 
-    console.log("Traffic sync complete:", {
+    log.info("Traffic sync cron job completed", {
       serversProcessed: result.serversProcessed,
       connectionsUpdated: result.connectionsUpdated,
       totalBytesUp: result.totalBytesUp.toString(),
@@ -62,7 +70,7 @@ export default async function handler(
       errors: result.errors.length > 0 ? result.errors : undefined,
     });
   } catch (error) {
-    console.error("Cron job error:", error);
+    log.error("Traffic sync cron job failed", {}, error);
     res.status(500).json({
       ok: false,
       error: "Internal server error",

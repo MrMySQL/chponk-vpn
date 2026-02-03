@@ -17,6 +17,9 @@ import {
   generateClientEmail,
 } from "../../services/xui/repository.js";
 import { generateVlessUrlForServer } from "../../services/config-generator.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ module: "bot-server-connect" });
 
 /**
  * Handle server selection - create 3x-ui client if needed and return config
@@ -29,6 +32,11 @@ export async function handleServerConnect(ctx: AuthContext): Promise<void> {
   }
 
   const serverId = parseInt(match[1], 10);
+
+  log.info("User connecting to server", {
+    userId: ctx.user.id,
+    serverId,
+  });
 
   // Get user's active subscription with plan
   const subscription = await db.query.subscriptions.findFirst({
@@ -43,6 +51,9 @@ export async function handleServerConnect(ctx: AuthContext): Promise<void> {
   });
 
   if (!subscription) {
+    log.info("User has no active subscription", {
+      userId: ctx.user.id,
+    });
     await ctx.answerCallbackQuery({
       text: "No active subscription. Use /subscribe to purchase a plan.",
       show_alert: true,
@@ -76,6 +87,13 @@ export async function handleServerConnect(ctx: AuthContext): Promise<void> {
 
     // If no existing connection, create client in 3x-ui and save connection
     if (!connection) {
+      log.info("Creating new 3x-ui client for server", {
+        userId: ctx.user.id,
+        serverId,
+        subscriptionId: subscription.id,
+        clientUuid: subscription.clientUuid,
+      });
+
       const clientEmail = generateClientEmail(ctx.user.id);
 
       // Add client to 3x-ui panel
@@ -103,6 +121,18 @@ export async function handleServerConnect(ctx: AuthContext): Promise<void> {
         .returning();
 
       connection = newConnection;
+
+      log.info("3x-ui client created and connection saved", {
+        userId: ctx.user.id,
+        serverId,
+        connectionId: connection.id,
+      });
+    } else {
+      log.debug("Using existing connection", {
+        userId: ctx.user.id,
+        serverId,
+        connectionId: connection.id,
+      });
     }
 
     // Generate VLESS URL
@@ -134,7 +164,11 @@ export async function handleServerConnect(ctx: AuthContext): Promise<void> {
 
     await ctx.reply(message, { parse_mode: "Markdown" });
   } catch (error) {
-    console.error("Failed to generate connection:", error);
+    log.error("Failed to generate connection", {
+      userId: ctx.user.id,
+      serverId,
+      subscriptionId: subscription?.id,
+    }, error);
     await ctx.reply(
       "❌ Failed to generate your connection. Please try again or contact support."
     );

@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { verifyJWT, validateCsrfToken } from "../../src/lib/jwt.js";
 import { parse as parseCookies } from "cookie";
+import { createLogger } from "../../src/lib/logger.js";
+
+const log = createLogger({ module: "admin-middleware" });
 
 export interface AdminUser {
   id: number;
@@ -36,9 +39,19 @@ export function requireAdmin(
   const admin = getAdminUser(req);
 
   if (!admin) {
+    log.warn("Unauthorized admin API access attempt", {
+      path: req.url,
+      method: req.method,
+    });
     res.status(401).json({ success: false, error: "Unauthorized" });
     return null;
   }
+
+  log.debug("Admin authenticated", {
+    adminId: admin.id,
+    telegramId: admin.telegramId,
+    path: req.url,
+  });
 
   return admin;
 }
@@ -70,6 +83,12 @@ export function requireCsrf(
   const cookieToken = getCsrfTokenFromCookie(req);
 
   if (!validateCsrfToken(headerToken, cookieToken)) {
+    log.warn("CSRF validation failed", {
+      path: req.url,
+      method: req.method,
+      hasHeaderToken: !!headerToken,
+      hasCookieToken: !!cookieToken,
+    });
     res.status(403).json({ success: false, error: "Invalid CSRF token" });
     return false;
   }

@@ -3,8 +3,13 @@ import { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
 import { plans } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ module: "bot-subscribe" });
 
 export async function subscribeCommand(ctx: AuthContext): Promise<void> {
+  log.debug("User viewing subscription plans", { userId: ctx.user.id });
+
   let activePlans;
   try {
     activePlans = await db
@@ -13,13 +18,13 @@ export async function subscribeCommand(ctx: AuthContext): Promise<void> {
       .where(eq(plans.isActive, true))
       .orderBy(plans.durationDays);
   } catch (error) {
-    console.error("Failed to fetch plans:", error);
+    log.error("Failed to fetch plans", { userId: ctx.user.id }, error);
     await ctx.reply("Failed to load plans. Please try again later.");
     return;
   }
 
   if (activePlans.length === 0) {
-    console.log("No active plans found in database");
+    log.warn("No active plans found in database");
     await ctx.reply(
       "No subscription plans are currently available. Please check back later."
     );

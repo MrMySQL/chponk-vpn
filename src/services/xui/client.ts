@@ -4,6 +4,9 @@
 
 import type { XuiServerConfig, XuiApiResponse } from "./types.js";
 import { XuiAuthError, XuiNetworkError, XuiApiError } from "./errors.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ service: "xui-client" });
 
 export class XuiHttpClient {
   private readonly baseUrl: string;
@@ -26,6 +29,12 @@ export class XuiHttpClient {
   async login(): Promise<void> {
     const url = `${this.baseUrl}${this.basePath}/login`;
 
+    log.debug("Attempting login to 3x-ui panel", {
+      baseUrl: this.baseUrl,
+      basePath: this.basePath,
+      username: this.username,
+    });
+
     let response: Response;
     try {
       response = await fetch(url, {
@@ -39,6 +48,9 @@ export class XuiHttpClient {
         }),
       });
     } catch (error) {
+      log.error("Network error connecting to 3x-ui panel", {
+        baseUrl: this.baseUrl,
+      }, error);
       throw new XuiNetworkError(
         `Failed to connect to 3x-ui panel at ${this.baseUrl}`,
         error instanceof Error ? error : undefined
@@ -46,6 +58,11 @@ export class XuiHttpClient {
     }
 
     if (!response.ok) {
+      log.error("Login failed with HTTP error", {
+        status: response.status,
+        statusText: response.statusText,
+        baseUrl: this.baseUrl,
+      });
       throw new XuiAuthError(
         `Login failed with status ${response.status}: ${response.statusText}`
       );
@@ -54,6 +71,10 @@ export class XuiHttpClient {
     const data = (await response.json()) as XuiApiResponse;
 
     if (!data.success) {
+      log.error("Login failed - API returned error", {
+        message: data.msg,
+        baseUrl: this.baseUrl,
+      });
       throw new XuiAuthError(data.msg || "Login failed");
     }
 
@@ -68,8 +89,15 @@ export class XuiHttpClient {
     }
 
     if (!this.sessionCookie) {
+      log.error("No session cookie received after login", {
+        baseUrl: this.baseUrl,
+      });
       throw new XuiAuthError("No session cookie received after login");
     }
+
+    log.info("Successfully logged in to 3x-ui panel", {
+      baseUrl: this.baseUrl,
+    });
   }
 
   /**
@@ -83,6 +111,7 @@ export class XuiHttpClient {
   ): Promise<T> {
     // Auto-login if no session
     if (!this.sessionCookie) {
+      log.debug("No session cookie, logging in first", { path });
       await this.login();
     }
 
@@ -90,10 +119,12 @@ export class XuiHttpClient {
 
     // If unauthorized, try to re-authenticate once
     if (result.needsReauth) {
+      log.info("Session expired, re-authenticating", { path });
       this.sessionCookie = null;
       await this.login();
       const retryResult = await this.doRequest<T>(method, path, body);
       if (retryResult.needsReauth) {
+        log.error("Re-authentication failed", { path });
         throw new XuiAuthError("Session expired and re-login failed");
       }
       return retryResult.data!;
@@ -132,6 +163,11 @@ export class XuiHttpClient {
         body: requestBody,
       });
     } catch (error) {
+      log.error("Network error during API request", {
+        method,
+        path,
+        baseUrl: this.baseUrl,
+      }, error);
       throw new XuiNetworkError(
         `Request failed: ${method} ${path}`,
         error instanceof Error ? error : undefined
@@ -140,10 +176,21 @@ export class XuiHttpClient {
 
     // Check for auth errors
     if (response.status === 401 || response.status === 403) {
+      log.debug("Request returned auth error, needs re-authentication", {
+        method,
+        path,
+        status: response.status,
+      });
       return { needsReauth: true };
     }
 
     if (!response.ok) {
+      log.error("API request failed with HTTP error", {
+        method,
+        path,
+        status: response.status,
+        statusText: response.statusText,
+      });
       throw new XuiApiError(
         `API request failed: ${method} ${path}`,
         response.status,
@@ -154,6 +201,11 @@ export class XuiHttpClient {
     const data = (await response.json()) as XuiApiResponse<T>;
 
     if (!data.success) {
+      log.error("API request failed - API returned error", {
+        method,
+        path,
+        message: data.msg,
+      });
       throw new XuiApiError(
         data.msg || "API request failed",
         undefined,
@@ -161,6 +213,7 @@ export class XuiHttpClient {
       );
     }
 
+    log.debug("API request successful", { method, path });
     return { data: data.obj };
   }
 

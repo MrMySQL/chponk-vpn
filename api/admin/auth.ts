@@ -5,6 +5,9 @@ import { db } from "../../src/db/index.js";
 import { users } from "../../src/db/schema.js";
 import { signJWT, validateTelegramAuth, generateCsrfToken } from "../../src/lib/jwt.js";
 import { methodNotAllowed } from "./middleware.js";
+import { createLogger } from "../../src/lib/logger.js";
+
+const log = createLogger({ handler: "admin/auth" });
 
 interface TelegramAuthData {
   id: string;
@@ -57,6 +60,10 @@ export default async function handler(
   if (authData.photo_url) authRecord.photo_url = authData.photo_url;
 
   if (!validateTelegramAuth(authRecord, botToken)) {
+    log.warn("Invalid Telegram authentication attempt", {
+      telegramId: authData.id,
+      username: authData.username,
+    });
     return res.status(401).json({
       success: false,
       error: "Invalid Telegram authentication",
@@ -70,6 +77,9 @@ export default async function handler(
     });
 
     if (!user) {
+      log.warn("Admin login attempt by unknown user", {
+        telegramId: authData.id,
+      });
       return res.status(403).json({
         success: false,
         error: "User not found. Please start the bot first.",
@@ -77,6 +87,11 @@ export default async function handler(
     }
 
     if (!user.isAdmin) {
+      log.warn("Admin login attempt by non-admin user", {
+        userId: user.id,
+        telegramId: authData.id,
+        username: user.username,
+      });
       return res.status(403).json({
         success: false,
         error: "Access denied. Admin privileges required.",
@@ -84,6 +99,10 @@ export default async function handler(
     }
 
     if (user.isBanned) {
+      log.warn("Admin login attempt by banned user", {
+        userId: user.id,
+        telegramId: authData.id,
+      });
       return res.status(403).json({
         success: false,
         error: "Your account has been banned.",
@@ -112,6 +131,12 @@ export default async function handler(
       })
     );
 
+    log.info("Admin login successful", {
+      userId: user.id,
+      telegramId: authData.id,
+      username: user.username,
+    });
+
     return res.status(200).json({
       success: true,
       data: {
@@ -126,7 +151,9 @@ export default async function handler(
       },
     });
   } catch (error) {
-    console.error("Admin auth error:", error);
+    log.error("Admin authentication failed", {
+      telegramId: authData.id,
+    }, error);
     return res.status(500).json({ success: false, error: "Authentication failed" });
   }
 }

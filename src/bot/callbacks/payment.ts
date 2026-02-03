@@ -12,6 +12,9 @@ import {
   upgradeSubscription,
   type ExistingSubscriptionWithConnections,
 } from "../../services/subscription-upgrade.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ module: "bot-payment" });
 
 /**
  * Handle plan purchase button click - send invoice
@@ -25,18 +28,34 @@ export async function handleBuyPlan(ctx: AuthContext): Promise<void> {
 
   const planId = parseInt(match[1], 10);
 
+  log.info("User initiating plan purchase", {
+    userId: ctx.user.id,
+    planId,
+  });
+
   // Fetch the plan
   const plan = await db.query.plans.findFirst({
     where: and(eq(plans.id, planId), eq(plans.isActive, true)),
   });
 
   if (!plan) {
+    log.warn("User tried to buy unavailable plan", {
+      userId: ctx.user.id,
+      planId,
+    });
     await ctx.answerCallbackQuery({
       text: "This plan is no longer available",
       show_alert: true,
     });
     return;
   }
+
+  log.info("Sending invoice for plan", {
+    userId: ctx.user.id,
+    planId: plan.id,
+    planName: plan.name,
+    priceStars: plan.priceStars,
+  });
 
   await ctx.answerCallbackQuery();
 
@@ -66,6 +85,12 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
   const query = ctx.preCheckoutQuery;
   if (!query) return;
 
+  log.info("Processing pre-checkout query", {
+    fromId: query.from.id,
+    totalAmount: query.total_amount,
+    currency: query.currency,
+  });
+
   try {
     // Parse payload
     const payload = JSON.parse(query.invoice_payload) as { planId: number };
@@ -76,6 +101,10 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
     });
 
     if (!plan) {
+      log.warn("Pre-checkout failed - plan not available", {
+        fromId: query.from.id,
+        planId: payload.planId,
+      });
       await ctx.answerPreCheckoutQuery(false, {
         error_message: "This plan is no longer available",
       });
@@ -84,6 +113,12 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
 
     // Verify price matches
     if (query.total_amount !== plan.priceStars) {
+      log.warn("Pre-checkout failed - price mismatch", {
+        fromId: query.from.id,
+        planId: payload.planId,
+        expectedPrice: plan.priceStars,
+        actualPrice: query.total_amount,
+      });
       await ctx.answerPreCheckoutQuery(false, {
         error_message: "Price has changed, please try again",
       });
@@ -91,8 +126,16 @@ export async function handlePreCheckout(ctx: Context): Promise<void> {
     }
 
     // All good - approve the payment
+    log.info("Pre-checkout approved", {
+      fromId: query.from.id,
+      planId: payload.planId,
+      amount: query.total_amount,
+    });
     await ctx.answerPreCheckoutQuery(true);
-  } catch {
+  } catch (error) {
+    log.error("Pre-checkout validation failed", {
+      fromId: query.from.id,
+    }, error);
     await ctx.answerPreCheckoutQuery(false, {
       error_message: "Payment validation failed",
     });
@@ -112,6 +155,13 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
   const userId = ctx.user.id;
   const chargeId = payment.telegram_payment_charge_id;
 
+  log.info("Processing successful payment", {
+    userId,
+    chargeId,
+    amount: payment.total_amount,
+    currency: payment.currency,
+  });
+
   try {
     // Idempotency check - prevent duplicate processing from Telegram retries
     const existingPayment = await db.query.payments.findFirst({
@@ -119,6 +169,11 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
     });
 
     if (existingPayment) {
+      log.info("Duplicate payment processing skipped", {
+        userId,
+        chargeId,
+        existingPaymentId: existingPayment.id,
+      });
       // Already processed this payment, just acknowledge
       await ctx.reply(
         "✅ Your subscription is already active!\n\n" +
@@ -156,6 +211,12 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
 
     if (existingSubscription) {
       // UPGRADE PATH - reuse clientUuid, update limits on servers
+      log.info("Processing subscription upgrade", {
+        userId,
+        existingSubscriptionId: existingSubscription.id,
+        existingPlanId: existingSubscription.planId,
+        newPlanId: plan.id,
+      });
       // Pass pre-fetched plan and subscription to avoid duplicate queries
       const result = await upgradeSubscription(
         userId,
@@ -182,9 +243,21 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
 
       upgradeMessage += `🌍 Use /servers to connect or switch servers.`;
 
+      log.info("Subscription upgrade completed", {
+        userId,
+        newSubscriptionId: result.newSubscription.id,
+        newPlanId: plan.id,
+        transferredConnections: result.transferredConnections,
+        updatedServers: result.updatedServers,
+      });
+
       await ctx.reply(upgradeMessage, { parse_mode: "Markdown" });
     } else {
       // NEW PURCHASE PATH - create new subscription with new clientUuid
+      log.info("Processing new subscription purchase", {
+        userId,
+        planId: plan.id,
+      });
       const clientUuid = randomUUID();
 
       // Calculate expiry
@@ -215,6 +288,14 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
         providerId: payment.telegram_payment_charge_id,
       });
 
+      log.info("New subscription created", {
+        userId,
+        subscriptionId: subscription.id,
+        planId: plan.id,
+        clientUuid,
+        expiresAt: expiresAt.toISOString(),
+      });
+
       // Send success message
       const traffic =
         plan.trafficLimitGb === null ? "Unlimited" : `${plan.trafficLimitGb} GB`;
@@ -230,7 +311,10 @@ export async function handleSuccessfulPayment(ctx: AuthContext): Promise<void> {
       );
     }
   } catch (error) {
-    console.error("Failed to process successful payment:", error);
+    log.error("Failed to process successful payment", {
+      userId,
+      chargeId,
+    }, error);
     await ctx.reply(
       "Payment received but there was an error activating your subscription. " +
         "Please contact support with your payment details."

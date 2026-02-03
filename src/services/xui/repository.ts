@@ -8,6 +8,9 @@ import { servers, type Server } from "../../db/schema.js";
 import { decrypt } from "../../lib/crypto.js";
 import { XuiClient, type XuiServerConfig } from "./index.js";
 import { XuiNotFoundError } from "./errors.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ service: "xui-repository" });
 
 /** In-memory cache of XuiClient instances per server */
 const clientCache = new Map<number, XuiClient>();
@@ -22,8 +25,11 @@ export async function getXuiClientForServer(
   // Check cache first
   const cached = clientCache.get(serverId);
   if (cached) {
+    log.debug("Using cached XUI client", { serverId });
     return cached;
   }
+
+  log.debug("Loading server from database", { serverId });
 
   // Load server from database
   const server = await db.query.servers.findFirst({
@@ -31,10 +37,12 @@ export async function getXuiClientForServer(
   });
 
   if (!server) {
+    log.error("Server not found", { serverId });
     throw new XuiNotFoundError("Server", String(serverId));
   }
 
   if (!server.isActive) {
+    log.warn("Attempted to get client for inactive server", { serverId });
     throw new Error(`Server ${serverId} is not active`);
   }
 
@@ -43,6 +51,11 @@ export async function getXuiClientForServer(
 
   // Cache for reuse
   clientCache.set(serverId, client);
+
+  log.info("Created and cached XUI client", {
+    serverId,
+    domain: server.domain,
+  });
 
   return client;
 }
@@ -70,9 +83,13 @@ export function createClientFromServer(server: Server): XuiClient {
 export async function getXuiClientsForAllServers(): Promise<
   Map<number, XuiClient>
 > {
+  log.debug("Loading all active servers");
+
   const activeServers = await db.query.servers.findMany({
     where: eq(servers.isActive, true),
   });
+
+  log.info("Found active servers", { count: activeServers.length });
 
   const clients = new Map<number, XuiClient>();
 
@@ -90,6 +107,7 @@ export async function getXuiClientsForAllServers(): Promise<
  * Useful for testing or after server config changes
  */
 export function clearXuiClientCache(): void {
+  log.info("Clearing XUI client cache", { size: clientCache.size });
   clientCache.clear();
 }
 

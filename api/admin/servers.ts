@@ -11,6 +11,9 @@ import {
   parsePagination,
   paginatedResponse,
 } from "./middleware.js";
+import { createLogger } from "../../src/lib/logger.js";
+
+const log = createLogger({ handler: "admin/servers" });
 
 export default async function handler(
   req: VercelRequest,
@@ -82,7 +85,7 @@ async function getServerById(res: VercelResponse, id: number) {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch server:", error);
+    log.error("Failed to fetch server", { serverId: id }, error);
     return res.status(500).json({ success: false, error: "Failed to fetch server" });
   }
 }
@@ -119,7 +122,7 @@ async function listServers(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json(paginatedResponse(serverList, count, pagination));
   } catch (error) {
-    console.error("Failed to list servers:", error);
+    log.error("Failed to list servers", {}, error);
     return res.status(500).json({ success: false, error: "Failed to list servers" });
   }
 }
@@ -174,7 +177,7 @@ async function listServerConnections(res: VercelResponse, serverId: number) {
 
     return res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Failed to list connections:", error);
+    log.error("Failed to list connections", { serverId }, error);
     return res.status(500).json({ success: false, error: "Failed to list connections" });
   }
 }
@@ -239,12 +242,18 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
         createdAt: servers.createdAt,
       });
 
+    log.info("Server created", {
+      serverId: server.id,
+      name: server.name,
+      domain: server.domain,
+    });
+
     return res.status(201).json({
       success: true,
       data: server,
     });
   } catch (error) {
-    console.error("Failed to create server:", error);
+    log.error("Failed to create server", { name, domain }, error);
 
     if (error instanceof Error && error.message.includes("unique constraint")) {
       return res.status(409).json({
@@ -323,12 +332,17 @@ async function handlePatch(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ success: false, error: "Server not found" });
     }
 
+    log.info("Server updated", {
+      serverId,
+      isActive: updates.isActive,
+    });
+
     return res.status(200).json({
       success: true,
       data: updated,
     });
   } catch (error) {
-    console.error("Failed to update server:", error);
+    log.error("Failed to update server", { serverId }, error);
     return res.status(500).json({ success: false, error: "Failed to update server" });
   }
 }
@@ -373,12 +387,14 @@ async function handleDelete(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ success: false, error: "Server not found" });
     }
 
+    log.info("Server deleted", { serverId });
+
     return res.status(200).json({
       success: true,
       message: "Server deleted",
     });
   } catch (error) {
-    console.error("Failed to delete server:", error);
+    log.error("Failed to delete server", { serverId }, error);
     return res.status(500).json({ success: false, error: "Failed to delete server" });
   }
 }
@@ -411,8 +427,17 @@ async function deleteConnection(res: VercelResponse, connectionId: number) {
     try {
       const xuiClient = await getXuiClientForServer(serverId);
       await xuiClient.deleteClient(clientUuid);
+      log.info("Deleted client from X-UI", {
+        connectionId,
+        serverId,
+        clientUuid,
+      });
     } catch (xuiError) {
-      console.error("Failed to delete client from X-UI:", xuiError);
+      log.warn("Failed to delete client from X-UI (continuing anyway)", {
+        connectionId,
+        serverId,
+        clientUuid,
+      }, xuiError);
       // Continue with database deletion even if X-UI fails
       // The client might already be deleted or server might be unreachable
     }
@@ -427,12 +452,14 @@ async function deleteConnection(res: VercelResponse, connectionId: number) {
       return res.status(404).json({ success: false, error: "Connection not found" });
     }
 
+    log.info("Connection deleted from database", { connectionId });
+
     return res.status(200).json({
       success: true,
       message: "Connection deleted",
     });
   } catch (error) {
-    console.error("Failed to delete connection:", error);
+    log.error("Failed to delete connection", { connectionId }, error);
     return res.status(500).json({ success: false, error: "Failed to delete connection" });
   }
 }

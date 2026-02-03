@@ -2,6 +2,9 @@ import { Context, NextFunction } from "grammy";
 import { db } from "../../db/index.js";
 import { users } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ module: "bot-auth" });
 
 export interface AuthContext extends Context {
   user: {
@@ -21,6 +24,7 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   if (!ctx.from) {
+    log.debug("No 'from' field in context, skipping auth");
     return;
   }
 
@@ -35,6 +39,10 @@ export async function authMiddleware(
 
   if (!user) {
     // Create new user
+    log.info("Creating new user", {
+      telegramId: telegramId.toString(),
+      username: ctx.from.username,
+    });
     [user] = await db
       .insert(users)
       .values({
@@ -64,6 +72,10 @@ export async function authMiddleware(
 
   // Check if banned
   if (user.isBanned) {
+    log.warn("Banned user attempted to use bot", {
+      userId: user.id,
+      telegramId: telegramId.toString(),
+    });
     await ctx.reply("Your account has been suspended.");
     return;
   }

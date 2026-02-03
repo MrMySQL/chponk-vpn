@@ -9,6 +9,9 @@ import {
   parsePagination,
   paginatedResponse,
 } from "./middleware.js";
+import { createLogger } from "../../src/lib/logger.js";
+
+const log = createLogger({ handler: "admin/users" });
 
 export default async function handler(
   req: VercelRequest,
@@ -79,7 +82,7 @@ async function getUserById(res: VercelResponse, id: number) {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch user:", error);
+    log.error("Failed to fetch user", { userId: id }, error);
     return res.status(500).json({ success: false, error: "Failed to fetch user" });
   }
 }
@@ -145,7 +148,7 @@ async function listUsers(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json(paginatedResponse(data, count, pagination));
   } catch (error) {
-    console.error("Failed to list users:", error);
+    log.error("Failed to list users", {}, error);
     return res.status(500).json({ success: false, error: "Failed to list users" });
   }
 }
@@ -190,6 +193,12 @@ async function handlePatch(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
+    log.info("User updated", {
+      userId,
+      isAdmin: updates.isAdmin,
+      isBanned: updates.isBanned,
+    });
+
     return res.status(200).json({
       success: true,
       data: {
@@ -198,7 +207,7 @@ async function handlePatch(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (error) {
-    console.error("Failed to update user:", error);
+    log.error("Failed to update user", { userId }, error);
     return res.status(500).json({ success: false, error: "Failed to update user" });
   }
 }
@@ -259,6 +268,14 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
         .where(eq(subscriptions.id, activeSubscription.id))
         .returning();
 
+      log.info("Extended subscription", {
+        userId,
+        subscriptionId: updated.id,
+        days,
+        previousExpiry: activeSubscription.expiresAt.toISOString(),
+        newExpiry: updated.expiresAt.toISOString(),
+      });
+
       return res.status(200).json({
         success: true,
         message: `Extended subscription by ${days} days`,
@@ -300,6 +317,14 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
         .values(subscriptionData)
         .returning();
 
+      log.info("Created gift subscription", {
+        userId,
+        subscriptionId: newSubscription.id,
+        planId: defaultPlan.id,
+        days,
+        expiresAt: newSubscription.expiresAt.toISOString(),
+      });
+
       return res.status(201).json({
         success: true,
         message: `Created new ${days}-day subscription`,
@@ -312,7 +337,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       });
     }
   } catch (error) {
-    console.error("Failed to gift subscription:", error);
+    log.error("Failed to gift subscription", { userId }, error);
     return res.status(500).json({ success: false, error: "Failed to gift subscription" });
   }
 }

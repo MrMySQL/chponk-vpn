@@ -4,13 +4,24 @@ import { eq } from "drizzle-orm";
 import { AuthContext } from "../middleware/auth.js";
 import { db } from "../../db/index.js";
 import { plans, subscriptions, users } from "../../db/schema.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ module: "bot-start" });
 
 export async function startCommand(ctx: AuthContext): Promise<void> {
   const name = ctx.user.firstName || ctx.user.username || "there";
 
+  log.info("User started bot", {
+    userId: ctx.user.id,
+    telegramId: ctx.user.telegramId.toString(),
+    username: ctx.user.username,
+  });
+
   // Auto-activate free trial for new users
   let trialActivated = false;
   if (!ctx.user.freeTrialClaimedAt) {
+    log.info("Checking for free trial eligibility", { userId: ctx.user.id });
+
     const trialPlan = await db.query.plans.findFirst({
       where: eq(plans.name, "Free Trial"),
     });
@@ -36,6 +47,12 @@ export async function startCommand(ctx: AuthContext): Promise<void> {
         .where(eq(users.id, ctx.user.id));
 
       trialActivated = true;
+
+      log.info("Free trial activated for user", {
+        userId: ctx.user.id,
+        planId: trialPlan.id,
+        expiresAt: expiresAt.toISOString(),
+      });
     }
   }
 

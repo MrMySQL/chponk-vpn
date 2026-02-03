@@ -8,6 +8,9 @@ import { subscriptions, userConnections } from "../db/schema.js";
 import { XuiNotFoundError, XuiError } from "./xui/errors.js";
 import { defaultCleanupDependencies } from "./dependencies.js";
 import type { CleanupDependencies } from "./types.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ service: "subscription-cleanup" });
 
 export interface CleanupStats {
   processed: number;
@@ -57,7 +60,9 @@ export async function cleanupExpiredSubscriptions(
     },
   });
 
-  console.log(`Found ${expiredSubscriptions.length} expired subscriptions`);
+  log.info("Found expired subscriptions to process", {
+    count: expiredSubscriptions.length,
+  });
 
   for (const subscription of expiredSubscriptions) {
     try {
@@ -67,18 +72,25 @@ export async function cleanupExpiredSubscriptions(
           const xuiClient = await getXuiClient(connection.serverId);
           await xuiClient.deleteClient(subscription.clientUuid);
           stats.clientsDeleted++;
-          console.log(
-            `Deleted client ${subscription.clientUuid} from server ${connection.serverId}`
-          );
+          log.info("Deleted client from server", {
+            clientUuid: subscription.clientUuid,
+            serverId: connection.serverId,
+            subscriptionId: subscription.id,
+          });
         } catch (error) {
           // Client may not exist on server (already deleted manually, etc.)
           if (error instanceof XuiNotFoundError) {
-            console.log(
-              `Client ${subscription.clientUuid} not found on server ${connection.serverId} (already deleted?)`
-            );
+            log.info("Client not found on server (already deleted?)", {
+              clientUuid: subscription.clientUuid,
+              serverId: connection.serverId,
+            });
           } else if (error instanceof XuiError) {
             const msg = `Failed to delete client from server ${connection.serverId}: ${error.message}`;
-            console.error(msg);
+            log.error("Failed to delete client from server", {
+              clientUuid: subscription.clientUuid,
+              serverId: connection.serverId,
+              subscriptionId: subscription.id,
+            }, error);
             errors.push(msg);
             // Continue with other servers
           } else {
@@ -92,9 +104,10 @@ export async function cleanupExpiredSubscriptions(
         await db
           .delete(userConnections)
           .where(eq(userConnections.subscriptionId, subscription.id));
-        console.log(
-          `Deleted ${subscription.connections.length} connection records for subscription ${subscription.id}`
-        );
+        log.info("Deleted connection records for subscription", {
+          subscriptionId: subscription.id,
+          connectionCount: subscription.connections.length,
+        });
       }
 
       // Update subscription status to expired
@@ -116,23 +129,40 @@ export async function cleanupExpiredSubscriptions(
       } catch (error) {
         // User may have blocked the bot or deleted their account
         const msg = `Failed to notify user ${subscription.user.telegramId}: ${error instanceof Error ? error.message : "Unknown error"}`;
-        console.error(msg);
+        log.warn("Failed to notify user about subscription expiry", {
+          userId: subscription.userId,
+          telegramId: subscription.user.telegramId.toString(),
+          subscriptionId: subscription.id,
+        }, error);
         errors.push(msg);
         // Don't fail the whole process for notification errors
       }
 
       stats.processed++;
-      console.log(
-        `Successfully processed subscription ${subscription.id} for user ${subscription.user.telegramId}`
-      );
+      log.info("Successfully processed expired subscription", {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        telegramId: subscription.user.telegramId.toString(),
+      });
     } catch (error) {
       stats.failed++;
       const msg = `Failed to process subscription ${subscription.id}: ${error instanceof Error ? error.message : "Unknown error"}`;
-      console.error(msg);
+      log.error("Failed to process expired subscription", {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+      }, error);
       errors.push(msg);
       // Continue processing other subscriptions
     }
   }
+
+  log.info("Subscription cleanup completed", {
+    processed: stats.processed,
+    failed: stats.failed,
+    clientsDeleted: stats.clientsDeleted,
+    notificationsSent: stats.notificationsSent,
+    errorCount: errors.length,
+  });
 
   return {
     success: stats.failed === 0,

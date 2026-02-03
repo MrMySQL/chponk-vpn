@@ -18,6 +18,9 @@ import {
   handleGetConnection,
 } from "./callbacks/server-connect.js";
 import { handleRefreshTraffic } from "./callbacks/account.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ module: "bot" });
 
 interface BotOptions {
   useTestEnv?: boolean;
@@ -36,6 +39,10 @@ export function createBot(
       environment: "test",
     };
   }
+
+  log.info("Creating bot instance", {
+    useTestEnv: options.useTestEnv ?? false,
+  });
 
   const bot = new Bot<AuthContext>(token, config);
 
@@ -86,10 +93,16 @@ export function createBot(
 
   // Handle unknown callbacks
   bot.on("callback_query:data", async (ctx) => {
+    log.warn("Unknown callback query", {
+      data: ctx.callbackQuery.data,
+      userId: ctx.from?.id,
+    });
     await ctx.answerCallbackQuery({
       text: "Unknown action",
     });
   });
+
+  log.info("Bot created and handlers registered");
 
   return bot;
 }
@@ -108,12 +121,15 @@ export function getBot(): Bot<AuthContext> {
       : process.env.BOT_TOKEN;
 
     if (!token) {
+      log.error("Bot token not configured", { useTestEnv });
       throw new Error(
         useTestEnv
           ? "TEST_BOT_TOKEN environment variable is not set (required when TELEGRAM_TEST_ENV=true)"
           : "BOT_TOKEN environment variable is not set"
       );
     }
+
+    log.info("Creating bot singleton", { useTestEnv });
     botInstance = createBot(token, { useTestEnv });
   }
   return botInstance;
@@ -122,8 +138,10 @@ export function getBot(): Bot<AuthContext> {
 export async function initBot(): Promise<Bot<AuthContext>> {
   const bot = getBot();
   if (!initPromise) {
+    log.info("Initializing bot");
     initPromise = bot.init();
   }
   await initPromise;
+  log.debug("Bot initialized");
   return bot;
 }

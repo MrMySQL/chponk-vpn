@@ -20,6 +20,9 @@ import {
 } from "../db/schema.js";
 import { defaultDependencies } from "./dependencies.js";
 import type { ServiceDependencies } from "./types.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ service: "subscription-upgrade" });
 
 export interface UpgradeResult {
   newSubscription: Subscription;
@@ -53,6 +56,14 @@ export async function upgradeSubscription(
   deps: ServiceDependencies = defaultDependencies
 ): Promise<UpgradeResult> {
   const { db, getXuiClient } = deps;
+
+  log.info("Starting subscription upgrade", {
+    userId,
+    oldSubscriptionId: existingSubscription.id,
+    oldPlanId: existingSubscription.planId,
+    newPlanId: newPlan.id,
+    newPlanName: newPlan.name,
+  });
 
   // Calculate new expiry - extend from current expiry to reward early upgraders
   const newExpiresAt = new Date(existingSubscription.expiresAt);
@@ -107,10 +118,11 @@ export async function upgradeSubscription(
 
       updatedServers++;
     } catch (error) {
-      console.error(
-        `Failed to update 3x-ui client on server ${connection.serverId}:`,
-        error
-      );
+      log.error("Failed to update 3x-ui client on server", {
+        serverId: connection.serverId,
+        clientUuid: existingSubscription.clientUuid,
+        userId,
+      }, error);
       failedServers++;
       // Continue with other servers - connection still works (UUID unchanged)
     }
@@ -121,6 +133,15 @@ export async function upgradeSubscription(
     .update(subscriptions)
     .set({ status: "cancelled" })
     .where(eq(subscriptions.id, existingSubscription.id));
+
+  log.info("Subscription upgrade completed", {
+    userId,
+    oldSubscriptionId: existingSubscription.id,
+    newSubscriptionId: newSubscription.id,
+    transferredConnections: connections.length,
+    updatedServers,
+    failedServers,
+  });
 
   return {
     newSubscription,

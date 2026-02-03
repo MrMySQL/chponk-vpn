@@ -12,6 +12,9 @@ import {
 } from "../db/schema.js";
 import { defaultDependencies } from "./dependencies.js";
 import type { ServiceDependencies } from "./types.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ service: "traffic-sync" });
 
 export interface TrafficSyncResult {
   serversProcessed: number;
@@ -37,6 +40,8 @@ export async function syncTrafficFromAllServers(
   deps: ServiceDependencies = defaultDependencies
 ): Promise<TrafficSyncResult> {
   const { db, getXuiClient } = deps;
+
+  log.info("Starting traffic sync for all servers");
 
   const result: TrafficSyncResult = {
     serversProcessed: 0,
@@ -70,6 +75,11 @@ export async function syncTrafficFromAllServers(
     existing.push(conn);
     connectionsByServer.set(conn.server.id, existing);
   }
+
+  log.info("Found active connections to sync", {
+    totalConnections: connections.length,
+    serverCount: connectionsByServer.size,
+  });
 
   // Process all servers in parallel
   const serverResults = await Promise.allSettled(
@@ -112,7 +122,10 @@ export async function syncTrafficFromAllServers(
             }
           } catch (error) {
             const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
-            console.error(errMsg);
+            log.error("Failed to sync traffic for connection", {
+              connectionId: connection.id,
+              serverId,
+            }, error);
             partialResult.errors.push(errMsg);
           }
         }
@@ -132,10 +145,18 @@ export async function syncTrafficFromAllServers(
       result.errors.push(...serverResult.value.errors);
     } else {
       const errMsg = `Failed to connect to server: ${serverResult.reason instanceof Error ? serverResult.reason.message : String(serverResult.reason)}`;
-      console.error(errMsg);
+      log.error("Failed to connect to server during traffic sync", {}, serverResult.reason);
       result.errors.push(errMsg);
     }
   }
+
+  log.info("Traffic sync completed", {
+    serversProcessed: result.serversProcessed,
+    connectionsUpdated: result.connectionsUpdated,
+    totalBytesUp: result.totalBytesUp.toString(),
+    totalBytesDown: result.totalBytesDown.toString(),
+    errorCount: result.errors.length,
+  });
 
   return result;
 }
@@ -152,6 +173,8 @@ export async function syncUserTraffic(
   deps: ServiceDependencies = defaultDependencies
 ): Promise<TrafficSyncResult> {
   const { db, getXuiClient } = deps;
+
+  log.info("Starting traffic sync for user", { userId });
 
   const result: TrafficSyncResult = {
     serversProcessed: 0,
@@ -233,7 +256,11 @@ export async function syncUserTraffic(
             }
           } catch (error) {
             const errMsg = `Failed to sync traffic for connection ${connection.id}: ${error instanceof Error ? error.message : String(error)}`;
-            console.error(errMsg);
+            log.error("Failed to sync user traffic for connection", {
+              connectionId: connection.id,
+              userId,
+              serverId,
+            }, error);
             partialResult.errors.push(errMsg);
           }
         }
@@ -253,10 +280,17 @@ export async function syncUserTraffic(
       result.errors.push(...serverResult.value.errors);
     } else {
       const errMsg = `Failed to connect to server: ${serverResult.reason instanceof Error ? serverResult.reason.message : String(serverResult.reason)}`;
-      console.error(errMsg);
+      log.error("Failed to connect to server during user traffic sync", { userId }, serverResult.reason);
       result.errors.push(errMsg);
     }
   }
+
+  log.info("User traffic sync completed", {
+    userId,
+    serversProcessed: result.serversProcessed,
+    connectionsUpdated: result.connectionsUpdated,
+    errorCount: result.errors.length,
+  });
 
   return result;
 }
