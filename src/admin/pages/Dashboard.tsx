@@ -61,11 +61,11 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">Dashboard</h1>
 
       {/* User Stats */}
-      <h2 className="text-lg font-semibold mb-4 text-gray-700">Users</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Users</h2>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <StatsCard
           title="Total Users"
           value={stats.users.total}
@@ -82,8 +82,8 @@ export default function Dashboard() {
       </div>
 
       {/* Subscription Stats */}
-      <h2 className="text-lg font-semibold mb-4 text-gray-700">Subscriptions</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Subscriptions</h2>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <StatsCard
           title="Total Subscriptions"
           value={stats.subscriptions.total}
@@ -100,8 +100,8 @@ export default function Dashboard() {
       </div>
 
       {/* Revenue Stats */}
-      <h2 className="text-lg font-semibold mb-4 text-gray-700">Revenue</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Revenue</h2>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <StatsCard
           title="Total Stars"
           value={`⭐ ${Number(stats.revenue.totalStars).toLocaleString()}`}
@@ -133,8 +133,8 @@ export default function Dashboard() {
       </div>
 
       {/* Infrastructure Stats */}
-      <h2 className="text-lg font-semibold mb-4 text-gray-700">Infrastructure</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Infrastructure</h2>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatsCard
           title="Servers"
           value={`${stats.servers.active} / ${stats.servers.total}`}

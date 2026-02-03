@@ -41,7 +41,7 @@ export default function DataTable<T extends { id: number }>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${col.className || ""}`}
+                  className={`px-3 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${col.className || ""}`}
                 >
                   {col.header}
                 </th>
@@ -51,7 +51,7 @@ export default function DataTable<T extends { id: number }>({
           <tbody className="bg-white divide-y divide-gray-200">
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={columns.length} className="px-3 md:px-6 py-8 text-center text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
@@ -59,7 +59,7 @@ export default function DataTable<T extends { id: number }>({
               data.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50">
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-6 py-4 whitespace-nowrap ${col.className || ""}`}>
+                    <td key={col.key} className={`px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-sm ${col.className || ""}`}>
                       {col.render
                         ? col.render(item)
                         : String((item as Record<string, unknown>)[col.key] ?? "")}
@@ -73,22 +73,22 @@ export default function DataTable<T extends { id: number }>({
       </div>
 
       {pagination && pagination.totalPages > 1 && (
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-          <div className="text-sm text-gray-500">
+        <div className="px-3 md:px-6 py-3 md:py-4 border-t border-gray-200 flex items-center justify-between gap-2">
+          <div className="text-xs md:text-sm text-gray-500">
             Page {pagination.page} of {pagination.totalPages}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 md:gap-2">
             <button
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-2 md:px-3 py-1 text-xs md:text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
             >
-              Previous
+              Prev
             </button>
             <button
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= pagination.totalPages}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-2 md:px-3 py-1 text-xs md:text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
             >
               Next
             </button>

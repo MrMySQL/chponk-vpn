@@ -130,20 +130,20 @@ export default function Payments() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Payments</h1>
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <h1 className="text-xl md:text-2xl font-bold">Payments</h1>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex gap-4">
+      <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
+        <div className="flex flex-wrap gap-2 md:gap-4">
           <select
             value={filters.status}
             onChange={(e) => {
               setFilters({ ...filters, status: e.target.value });
               setPage(1);
             }}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="flex-1 min-w-[120px] md:flex-none px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
           >
             <option value="">All Statuses</option>
             <option value="completed">Completed</option>
@@ -157,7 +157,7 @@ export default function Payments() {
               setFilters({ ...filters, currency: e.target.value });
               setPage(1);
             }}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="flex-1 min-w-[120px] md:flex-none px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
           >
             <option value="">All Currencies</option>
             <option value="stars">Stars</option>

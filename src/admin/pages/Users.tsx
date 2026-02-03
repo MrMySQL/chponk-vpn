@@ -176,38 +176,40 @@ export default function Users() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Users</h1>
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <h1 className="text-xl md:text-2xl font-bold">Users</h1>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <form onSubmit={handleSearch} className="flex gap-4">
+      <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
+        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3 md:gap-4">
           <input
             type="text"
             placeholder="Search by username, name, or Telegram ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="flex-1 px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
           />
-          <select
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Users</option>
-            <option value="admin">Admins Only</option>
-            <option value="banned">Banned Only</option>
-          </select>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
+          <div className="flex gap-2 md:gap-4">
+            <select
+              value={filter}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                setPage(1);
+              }}
+              className="flex-1 md:flex-none px-3 md:px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm md:text-base"
+            >
+              <option value="">All Users</option>
+              <option value="admin">Admins Only</option>
+              <option value="banned">Banned Only</option>
+            </select>
+            <button
+              type="submit"
+              className="px-4 md:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm md:text-base whitespace-nowrap"
+            >
+              Search
+            </button>
+          </div>
         </form>
       </div>
 
