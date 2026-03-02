@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq, sql, desc, and } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
-import { subscriptions, users, plans } from "../../src/db/schema.js";
+import { subscriptions, users, plans, userConnections } from "../../src/db/schema.js";
 import {
   requireAdmin,
   requireCsrf,
@@ -63,11 +63,17 @@ async function getSubscriptionById(res: VercelResponse, id: number) {
       return res.status(404).json({ success: false, error: "Subscription not found" });
     }
 
+    // Aggregate traffic from connections instead of using stale trafficUsedBytes
+    let trafficUsedBytes = BigInt(0);
+    for (const conn of subscription.connections) {
+      trafficUsedBytes += conn.trafficUp + conn.trafficDown;
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         ...subscription,
-        trafficUsedBytes: subscription.trafficUsedBytes.toString(),
+        trafficUsedBytes: trafficUsedBytes.toString(),
         user: {
           ...subscription.user,
           telegramId: subscription.user.telegramId.toString(),
@@ -109,6 +115,16 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
       .from(subscriptions)
       .where(whereClause);
 
+    // Subquery to aggregate traffic from user_connections per subscription
+    const trafficSub = db
+      .select({
+        subscriptionId: userConnections.subscriptionId,
+        totalTraffic: sql<bigint>`coalesce(sum(${userConnections.trafficUp} + ${userConnections.trafficDown}), 0)`.as("total_traffic"),
+      })
+      .from(userConnections)
+      .groupBy(userConnections.subscriptionId)
+      .as("traffic_sub");
+
     // Get subscriptions with user and plan info
     const subscriptionList = await db
       .select({
@@ -119,7 +135,7 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
         status: subscriptions.status,
         startsAt: subscriptions.startsAt,
         expiresAt: subscriptions.expiresAt,
-        trafficUsedBytes: subscriptions.trafficUsedBytes,
+        trafficUsedBytes: sql<bigint>`coalesce(${trafficSub.totalTraffic}, 0)`,
         createdAt: subscriptions.createdAt,
         userTelegramId: users.telegramId,
         userUsername: users.username,
@@ -130,6 +146,7 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
       .from(subscriptions)
       .leftJoin(users, eq(subscriptions.userId, users.id))
       .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .leftJoin(trafficSub, eq(subscriptions.id, trafficSub.subscriptionId))
       .where(whereClause)
       .orderBy(desc(subscriptions.createdAt))
       .limit(pagination.limit)
