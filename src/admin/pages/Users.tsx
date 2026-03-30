@@ -105,6 +105,7 @@ export default function Users() {
           <div className="text-sm text-gray-500">
             {user.username ? `@${user.username}` : user.telegramId}
           </div>
+          <div className="text-xs text-gray-400">ID: {user.id}</div>
         </div>
       ),
     },

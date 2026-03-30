@@ -116,6 +116,7 @@ export default function Subscriptions() {
               <div className="text-sm text-gray-500">
                 {sub.user.username ? `@${sub.user.username}` : sub.user.telegramId}
               </div>
+              <div className="text-xs text-gray-400">ID: {sub.userId}</div>
             </>
           ) : (
             <span className="text-gray-400">User #{sub.userId}</span>
