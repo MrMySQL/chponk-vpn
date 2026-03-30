@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { waitUntil } from "@vercel/functions";
 import { eq, sql, desc, and } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
 import { subscriptions, users, plans, userConnections } from "../../src/db/schema.js";
@@ -9,10 +10,7 @@ import {
   parsePagination,
   paginatedResponse,
 } from "./middleware.js";
-import { getXuiClientForServer } from "../../src/services/xui/repository.js";
-import { createLogger } from "../../src/lib/logger.js";
-
-const log = createLogger({ service: "admin-subscriptions" });
+import { syncSubscriptionToServers } from "../../src/services/subscription-sync.js";
 
 export default async function handler(
   req: VercelRequest,
@@ -258,49 +256,16 @@ async function handlePatch(req: VercelRequest, res: VercelResponse) {
       .where(eq(subscriptions.id, subscriptionId))
       .returning();
 
-    // Sync expiry change to 3x-ui servers
+    // Sync expiry change to 3x-ui servers in the background
     if (updates.expiresAt) {
-      const connections = await db.query.userConnections.findMany({
-        where: eq(userConnections.subscriptionId, subscriptionId),
-      });
-
-      const plan = await db.query.plans.findFirst({
-        where: eq(plans.id, current.planId),
-      });
-
-      const results = await Promise.allSettled(
-        connections.map(async (connection) => {
-          const xuiClient = await getXuiClientForServer(connection.serverId);
-          await xuiClient.updateClient(current.clientUuid, {
-            expiryTime: (updates.expiresAt as Date).getTime(),
-            ...(plan && {
-              totalGB: plan.trafficLimitGb ?? 0,
-              limitIp: plan.maxDevices,
-            }),
-          });
-          return connection.serverId;
+      waitUntil(
+        syncSubscriptionToServers({
+          subscriptionId,
+          clientUuid: current.clientUuid,
+          planId: current.planId,
+          newExpiresAt: updates.expiresAt as Date,
         })
       );
-
-      const syncedServers = results.filter((r) => r.status === "fulfilled").length;
-      const failedServers = results.filter((r) => r.status === "rejected").length;
-
-      for (const result of results) {
-        if (result.status === "rejected") {
-          log.error("Failed to sync expiry to 3x-ui server", {
-            subscriptionId,
-            clientUuid: current.clientUuid,
-          }, result.reason);
-        }
-      }
-
-      log.info("Subscription extended and synced to servers", {
-        subscriptionId,
-        newExpiresAt: updates.expiresAt,
-        syncedServers,
-        failedServers,
-        totalConnections: connections.length,
-      });
     }
 
     return res.status(200).json({
