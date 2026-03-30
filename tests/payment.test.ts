@@ -48,7 +48,7 @@ describe("Payment Flow", () => {
         id: 1,
         name: "Monthly",
         durationDays: 30,
-        priceStars: 100,
+        priceStars: 30,
         priceTon: "5.00",
         trafficLimitGb: null,
         maxDevices: 3,

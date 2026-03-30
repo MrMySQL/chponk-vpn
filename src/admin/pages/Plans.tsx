@@ -28,7 +28,7 @@ interface PlanForm {
 const emptyForm: PlanForm = {
   name: "",
   durationDays: 30,
-  priceStars: 100,
+  priceStars: 30,
   priceTon: "1.0",
   trafficLimitGb: "",
   maxDevices: 3,
