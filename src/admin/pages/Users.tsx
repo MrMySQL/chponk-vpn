@@ -77,6 +77,19 @@ export default function Users() {
     }
   }
 
+  async function handleDeleteUser(user: User) {
+    if (!confirm(`Delete user ${user.firstName || user.username || user.telegramId}? This removes all their data and allows them to use the free trial again.`)) return;
+    setActionLoading(true);
+    try {
+      await api.deleteUser(user.id);
+      loadUsers();
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleGift() {
     if (!selectedUser) return;
     setActionLoading(true);
@@ -173,6 +186,15 @@ export default function Users() {
           >
             Gift
           </button>
+          {!user.isAdmin && (
+            <button
+              onClick={() => handleDeleteUser(user)}
+              disabled={actionLoading}
+              className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+            >
+              Delete
+            </button>
+          )}
         </div>
       ),
     },

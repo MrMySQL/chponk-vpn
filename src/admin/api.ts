@@ -158,6 +158,12 @@ class ApiClient {
     });
   }
 
+  async deleteUser(userId: number) {
+    return this.request(`/users?id=${userId}`, {
+      method: "DELETE",
+    });
+  }
+
   async giftSubscription(userId: number, days: number) {
     return this.request(`/users?id=${userId}&action=gift`, {
       method: "POST",

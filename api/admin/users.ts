@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { eq, sql, desc, or, ilike, and } from "drizzle-orm";
+import { eq, sql, desc, or, ilike, and, inArray } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
-import { users, subscriptions, plans, type User, type NewSubscription } from "../../src/db/schema.js";
+import { users, subscriptions, payments, userConnections, plans, type User, type NewSubscription } from "../../src/db/schema.js";
+import { getXuiClientForServer } from "../../src/services/xui/repository.js";
 import {
   requireAdmin,
   requireCsrf,
@@ -31,8 +32,10 @@ export default async function handler(
       return handlePatch(req, res);
     case "POST":
       return handlePost(req, res);
+    case "DELETE":
+      return handleDelete(req, res);
     default:
-      return methodNotAllowed(res, ["GET", "PATCH", "POST"]);
+      return methodNotAllowed(res, ["GET", "PATCH", "POST", "DELETE"]);
   }
 }
 
@@ -346,5 +349,105 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     log.error("Failed to gift subscription", { userId }, error);
     return res.status(500).json({ success: false, error: "Failed to gift subscription" });
+  }
+}
+
+async function handleDelete(req: VercelRequest, res: VercelResponse) {
+  const { id } = req.query;
+
+  if (!id || typeof id !== "string") {
+    return res.status(400).json({ success: false, error: "User ID required" });
+  }
+
+  const userId = parseInt(id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ success: false, error: "Invalid user ID" });
+  }
+
+  try {
+    // Check user exists
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    // Prevent deleting admin users
+    if (user.isAdmin) {
+      return res.status(400).json({ success: false, error: "Cannot delete admin users" });
+    }
+
+    // Get all subscriptions with their connections for 3x-ui cleanup
+    const userSubscriptions = await db.query.subscriptions.findMany({
+      where: eq(subscriptions.userId, userId),
+      with: {
+        connections: {
+          with: { server: true },
+        },
+      },
+    });
+
+    // Delete 3x-ui clients from all servers
+    for (const sub of userSubscriptions) {
+      for (const conn of sub.connections) {
+        try {
+          const xuiClient = await getXuiClientForServer(conn.serverId);
+          await xuiClient.deleteClient(sub.clientUuid);
+          log.info("Deleted 3x-ui client during user deletion", {
+            userId,
+            serverId: conn.serverId,
+            clientUuid: sub.clientUuid,
+          });
+        } catch (error) {
+          log.warn("Failed to delete 3x-ui client (continuing)", {
+            userId,
+            serverId: conn.serverId,
+            clientUuid: sub.clientUuid,
+          }, error);
+        }
+      }
+    }
+
+    const subscriptionIds = userSubscriptions.map((s) => s.id);
+
+    // Delete in order: connections -> payments -> subscriptions -> user
+    if (subscriptionIds.length > 0) {
+      await db
+        .delete(userConnections)
+        .where(inArray(userConnections.subscriptionId, subscriptionIds));
+
+      await db
+        .delete(payments)
+        .where(eq(payments.userId, userId));
+
+      await db
+        .delete(subscriptions)
+        .where(eq(subscriptions.userId, userId));
+    } else {
+      await db
+        .delete(payments)
+        .where(eq(payments.userId, userId));
+    }
+
+    // Delete the user
+    await db
+      .delete(users)
+      .where(eq(users.id, userId));
+
+    log.info("User deleted", {
+      userId,
+      telegramId: user.telegramId.toString(),
+      subscriptionsDeleted: subscriptionIds.length,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+    });
+  } catch (error) {
+    log.error("Failed to delete user", { userId }, error);
+    return res.status(500).json({ success: false, error: "Failed to delete user" });
   }
 }
