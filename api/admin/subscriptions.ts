@@ -117,11 +117,12 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
       .from(subscriptions)
       .where(whereClause);
 
-    // Subquery to aggregate traffic from user_connections per subscription
+    // Subquery to aggregate traffic and get xuiClientEmail from user_connections per subscription
     const trafficSub = db
       .select({
         subscriptionId: userConnections.subscriptionId,
         totalTraffic: sql<bigint>`coalesce(sum(${userConnections.trafficUp} + ${userConnections.trafficDown}), 0)`.as("total_traffic"),
+        xuiClientEmail: sql<string>`min(${userConnections.xuiClientEmail})`.as("xui_client_email"),
       })
       .from(userConnections)
       .groupBy(userConnections.subscriptionId)
@@ -138,6 +139,7 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
         startsAt: subscriptions.startsAt,
         expiresAt: subscriptions.expiresAt,
         trafficUsedBytes: sql<bigint>`coalesce(${trafficSub.totalTraffic}, 0)`,
+        xuiClientEmail: trafficSub.xuiClientEmail,
         createdAt: subscriptions.createdAt,
         userTelegramId: users.telegramId,
         userUsername: users.username,
@@ -164,6 +166,7 @@ async function listSubscriptions(req: VercelRequest, res: VercelResponse) {
       startsAt: s.startsAt,
       expiresAt: s.expiresAt,
       trafficUsedBytes: s.trafficUsedBytes.toString(),
+      xuiClientEmail: s.xuiClientEmail ?? null,
       createdAt: s.createdAt,
       user: s.userTelegramId
         ? {

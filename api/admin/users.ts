@@ -127,6 +127,12 @@ async function listUsers(req: VercelRequest, res: VercelResponse) {
         subscriptions: {
           where: eq(subscriptions.status, "active"),
           limit: 1,
+          with: {
+            connections: {
+              limit: 1,
+              columns: { xuiClientEmail: true },
+            },
+          },
         },
       },
       orderBy: desc(users.createdAt),
@@ -143,6 +149,7 @@ async function listUsers(req: VercelRequest, res: VercelResponse) {
       isAdmin: user.isAdmin,
       isBanned: user.isBanned,
       hasActiveSubscription: user.subscriptions.length > 0,
+      xuiClientEmail: user.subscriptions[0]?.connections[0]?.xuiClientEmail ?? null,
       createdAt: user.createdAt,
     }));
 

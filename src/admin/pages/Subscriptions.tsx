@@ -12,6 +12,7 @@ interface Subscription {
   expiresAt: string;
   trafficUsedBytes: string;
   createdAt: string;
+  xuiClientEmail: string | null;
   user: { telegramId: string; username: string | null; firstName: string | null } | null;
   plan: { name: string; durationDays: number } | null;
 }
@@ -116,7 +117,9 @@ export default function Subscriptions() {
               <div className="text-sm text-gray-500">
                 {sub.user.username ? `@${sub.user.username}` : sub.user.telegramId}
               </div>
-              <div className="text-xs text-gray-400">ID: {sub.userId}</div>
+              {sub.xuiClientEmail && (
+                <div className="text-xs text-gray-400">{sub.xuiClientEmail}</div>
+              )}
             </>
           ) : (
             <span className="text-gray-400">User #{sub.userId}</span>

@@ -11,6 +11,7 @@ interface User {
   isAdmin: boolean;
   isBanned: boolean;
   hasActiveSubscription: boolean;
+  xuiClientEmail: string | null;
   createdAt: string;
 }
 
@@ -105,7 +106,9 @@ export default function Users() {
           <div className="text-sm text-gray-500">
             {user.username ? `@${user.username}` : user.telegramId}
           </div>
-          <div className="text-xs text-gray-400">ID: {user.id}</div>
+          {user.xuiClientEmail && (
+            <div className="text-xs text-gray-400">{user.xuiClientEmail}</div>
+          )}
         </div>
       ),
     },
